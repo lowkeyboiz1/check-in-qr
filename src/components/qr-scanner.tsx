@@ -10,6 +10,7 @@ import { useSetAtom } from 'jotai'
 import { setCurrentGuestAtom, isLoadingAtom } from '@/store/atoms'
 import type { Guest } from '@/store/atoms'
 import confetti from 'canvas-confetti'
+import { ScrollArea } from '@/components/ui/scroll-area'
 
 interface QRScannerProps {
   onScanSuccess?: (result: string) => void
@@ -248,17 +249,17 @@ export function QRScannerComponent({ onScanSuccess }: QRScannerProps) {
         // You can ignore this callback if you don't want to do anything on scan failure.
       }
 
-      // Enhanced configuration for better mobile QR scanning
+      // Enhanced configuration for full screen mobile QR scanning
       const config = {
         fps: 10,
-        qrbox: { width: 250, height: 250 },
+        // Use larger scanning area or auto-detect based on container size
         aspectRatio: 1.0,
         disableFlip: false,
         formatsToSupport: [Html5QrcodeSupportedFormats.QR_CODE],
         // Additional camera constraints for better mobile experience
         videoConstraints: {
-          width: { ideal: 1280 },
-          height: { ideal: 720 },
+          width: { ideal: 1920 },
+          height: { ideal: 1080 },
           facingMode: isBackCamera ? 'environment' : 'user',
           focusMode: 'continuous'
         },
@@ -453,37 +454,36 @@ export function QRScannerComponent({ onScanSuccess }: QRScannerProps) {
       </div>
 
       {/* Main Scanner Area */}
-      <div className='flex flex-1 flex-col justify-center p-4'>
-        {/* Error Message */}
-        {error && (
-          <div className='mb-4 rounded-2xl border border-red-200 bg-red-50 p-4'>
-            <div className='flex items-center gap-2'>
-              <div className='h-2 w-2 flex-shrink-0 rounded-full bg-red-500' />
-              <div className='flex-1'>
-                <p className='text-sm font-medium text-red-700'>{error}</p>
-                {error.includes('Element') && (
-                  <Button
-                    onClick={() => {
-                      setError(null)
-                      window.location.reload()
-                    }}
-                    size='sm'
-                    variant='outline'
-                    className='mt-2 border-red-300 text-red-700 hover:bg-red-100'
-                  >
-                    Refresh trang
-                  </Button>
-                )}
+      <div className='flex flex-1 flex-col p-4'>
+        <ScrollArea className='flex-1'>
+          <div className='space-y-4 pb-4'>
+            {/* Error Message */}
+            {error && (
+              <div className='rounded-2xl border border-red-200 bg-red-50 p-4'>
+                <div className='flex items-center gap-2'>
+                  <div className='h-2 w-2 flex-shrink-0 rounded-full bg-red-500' />
+                  <div className='flex-1'>
+                    <p className='text-sm font-medium text-red-700'>{error}</p>
+                    {error.includes('Element') && (
+                      <Button
+                        onClick={() => {
+                          setError(null)
+                          window.location.reload()
+                        }}
+                        size='sm'
+                        variant='outline'
+                        className='mt-2 border-red-300 text-red-700 hover:bg-red-100'
+                      >
+                        Refresh trang
+                      </Button>
+                    )}
+                  </div>
+                </div>
               </div>
-            </div>
-          </div>
-        )}
+            )}
 
-        {/* Scanner Container */}
-        <Card className='mx-auto w-full max-w-sm rounded-3xl border border-gray-200 bg-white p-6 shadow-lg'>
-          <div className='space-y-6'>
-            {/* Camera Viewport */}
-            <div className='relative aspect-square overflow-hidden rounded-2xl bg-gradient-to-br from-gray-50 to-gray-100'>
+            {/* Full Screen Scanner Container */}
+            <div className='relative w-full flex-1 overflow-hidden rounded-2xl bg-gradient-to-br from-gray-50 to-gray-100'>
               {/* Always render qr-reader element, but conditionally show content */}
               <div id='qr-reader' className={`h-full w-full ${!isScanning ? 'hidden' : ''}`} onLoad={() => console.log('qr-reader element loaded')} />
 
@@ -491,155 +491,158 @@ export function QRScannerComponent({ onScanSuccess }: QRScannerProps) {
                 <>
                   {/* Debug info in development */}
                   {process.env.NODE_ENV === 'development' && (
-                    <div className='absolute top-2 left-2 z-10 rounded bg-black/50 px-2 py-1 text-xs text-white'>
+                    <div className='absolute top-4 left-4 z-50 rounded bg-black/70 px-3 py-2 text-xs text-white'>
                       Camera: {isBackCamera ? 'Back' : 'Front'} | ID: {currentCameraId?.slice(-4)}
                     </div>
                   )}
-                  {/* Scanning Overlay */}
-                  <div className='pointer-events-none absolute inset-0'>
-                    <div className='absolute inset-4 rounded-2xl border-2 border-white shadow-lg'>
-                      <div className='absolute top-0 left-0 h-6 w-6 rounded-tl-lg border-t-4 border-l-4 border-blue-500' />
-                      <div className='absolute top-0 right-0 h-6 w-6 rounded-tr-lg border-t-4 border-r-4 border-blue-500' />
-                      <div className='absolute bottom-0 left-0 h-6 w-6 rounded-bl-lg border-b-4 border-l-4 border-blue-500' />
-                      <div className='absolute right-0 bottom-0 h-6 w-6 rounded-br-lg border-r-4 border-b-4 border-blue-500' />
-                    </div>
 
-                    {/* Scanning Line Animation */}
-                    <motion.div
-                      className='absolute right-4 left-4 h-0.5 bg-gradient-to-r from-transparent via-blue-500 to-transparent'
-                      animate={{
-                        top: ['16px', 'calc(100% - 16px)', '16px']
-                      }}
-                      transition={{
-                        duration: 2,
-                        repeat: Infinity,
-                        ease: 'easeInOut'
-                      }}
-                    />
+                  {/* Control overlay */}
+                  <div className='absolute top-4 right-4 z-50'>
+                    <motion.div whileTap={{ scale: 0.95 }}>
+                      <Button onClick={stopScanning} size='sm' variant='outline' className='border-white/30 bg-black/70 text-white hover:bg-black/90'>
+                        <X className='mr-1 h-4 w-4' />
+                        Đóng
+                      </Button>
+                    </motion.div>
+                  </div>
+
+                  {/* Camera switch control */}
+                  {cameras.length > 1 && (
+                    <div className='absolute right-4 bottom-4 z-50'>
+                      <motion.div whileTap={{ scale: 0.95 }}>
+                        <Button onClick={switchCamera} size='sm' variant='outline' className='border-white/30 bg-black/70 text-white hover:bg-black/90'>
+                          <RotateCcw className='mr-1 h-4 w-4' />
+                          {isBackCamera ? 'Trước' : 'Sau'}
+                        </Button>
+                      </motion.div>
+                    </div>
+                  )}
+
+                  {/* Full screen instructions */}
+                  <div className='absolute bottom-4 left-4 z-50'>
+                    <div className='rounded bg-black/70 px-3 py-2 text-sm text-white'>
+                      <p>🎯 Hướng camera vào mã QR</p>
+                    </div>
                   </div>
                 </>
               ) : (
                 <div className='flex h-full w-full items-center justify-center'>
-                  <div className='space-y-4 text-center'>
-                    <div className='mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-blue-100 to-blue-50'>
-                      <Camera className='h-8 w-8 text-blue-600' />
+                  <div className='space-y-6 text-center'>
+                    <div className='mx-auto flex h-20 w-20 items-center justify-center rounded-3xl bg-gradient-to-br from-blue-100 to-blue-50'>
+                      <Camera className='h-10 w-10 text-blue-600' />
                     </div>
                     <div>
-                      <p className='font-medium text-gray-700'>Chưa bắt đầu quét</p>
-                      <p className='mt-1 text-sm text-gray-500'>Nhấn nút bên dưới để mở camera</p>
+                      <p className='text-lg font-medium text-gray-700'>Chưa bắt đầu quét</p>
+                      <p className='mt-2 text-sm text-gray-500'>Nhấn nút bên dưới để mở camera toàn màn hình</p>
                     </div>
                   </div>
                 </div>
               )}
             </div>
 
-            {/* Action Buttons */}
-            <div className='space-y-3'>
-              <motion.div whileTap={{ scale: 0.98 }}>
-                <Button
-                  onClick={isScanning ? stopScanning : startScanning}
-                  size='lg'
-                  className={`touch-target h-14 w-full rounded-2xl text-base font-semibold shadow-lg transition-all duration-200 ${
-                    isScanning
-                      ? 'bg-gradient-to-r from-red-500 to-red-600 text-white shadow-red-200 hover:from-red-600 hover:to-red-700'
-                      : 'bg-gradient-to-r from-blue-600 to-blue-700 text-white shadow-blue-200 hover:from-blue-700 hover:to-blue-800'
-                  }`}
-                >
-                  {isScanning ? (
-                    <>
-                      <CameraOff className='mr-2 h-5 w-5' />
-                      Dừng quét
-                    </>
-                  ) : (
-                    <>
+            {/* Action Buttons - Only show when not scanning */}
+            {!isScanning && (
+              <Card className='mx-auto w-full max-w-sm rounded-3xl border border-gray-200 bg-white p-6 shadow-lg'>
+                <div className='space-y-4'>
+                  <motion.div whileTap={{ scale: 0.98 }}>
+                    <Button
+                      onClick={startScanning}
+                      size='lg'
+                      className='touch-target h-14 w-full rounded-2xl bg-gradient-to-r from-blue-600 to-blue-700 text-base font-semibold text-white shadow-lg shadow-blue-200 transition-all duration-200 hover:from-blue-700 hover:to-blue-800'
+                    >
                       <Camera className='mr-2 h-5 w-5' />
-                      Bắt đầu quét
-                    </>
+                      Bắt đầu quét toàn màn hình
+                    </Button>
+                  </motion.div>
+
+                  {/* Camera Switch Button */}
+                  {cameras.length > 1 && (
+                    <motion.div whileTap={{ scale: 0.98 }}>
+                      <Button
+                        onClick={switchCamera}
+                        variant='outline'
+                        size='lg'
+                        className='touch-target h-12 w-full rounded-2xl border-2 border-gray-200 bg-white text-gray-700 hover:border-gray-300 hover:bg-gray-50'
+                      >
+                        <RotateCcw className='mr-2 h-4 w-4' />
+                        {isBackCamera ? 'Chuyển sang camera trước' : 'Chuyển sang camera sau'}
+                      </Button>
+                    </motion.div>
                   )}
-                </Button>
-              </motion.div>
 
-              {/* Camera Switch Button */}
-              {cameras.length > 1 && (
-                <motion.div whileTap={{ scale: 0.98 }}>
-                  <Button
-                    onClick={switchCamera}
-                    variant='outline'
-                    size='lg'
-                    className='touch-target h-12 w-full rounded-2xl border-2 border-gray-200 bg-white text-gray-700 hover:border-gray-300 hover:bg-gray-50'
-                  >
-                    <RotateCcw className='mr-2 h-4 w-4' />
-                    {isBackCamera ? 'Chuyển sang camera trước' : 'Chuyển sang camera sau'}
-                  </Button>
-                </motion.div>
-              )}
-
-              {/* Force Back Camera Button - if not using back camera */}
-              {cameras.length > 1 && !isBackCamera && (
-                <motion.div whileTap={{ scale: 0.98 }}>
-                  <Button
-                    onClick={async () => {
-                      const backCamera = cameras.find((device) => {
-                        const label = device.label.toLowerCase()
-                        return label.includes('back') || label.includes('rear') || label.includes('environment') || label.includes('main')
-                      })
-                      if (backCamera) {
-                        try {
-                          if (scannerRef.current && isScanning) {
-                            await scannerRef.current.stop()
+                  {/* Force Back Camera Button - if not using back camera */}
+                  {cameras.length > 1 && !isBackCamera && (
+                    <motion.div whileTap={{ scale: 0.98 }}>
+                      <Button
+                        onClick={async () => {
+                          const backCamera = cameras.find((device) => {
+                            const label = device.label.toLowerCase()
+                            return label.includes('back') || label.includes('rear') || label.includes('environment') || label.includes('main')
+                          })
+                          if (backCamera) {
+                            try {
+                              if (scannerRef.current && isScanning) {
+                                await scannerRef.current.stop()
+                              }
+                              setCurrentCameraId(backCamera.id)
+                              setIsBackCamera(true)
+                              if (isScanning) {
+                                setTimeout(() => {
+                                  startScanningWithCamera(backCamera.id)
+                                }, 200)
+                              }
+                            } catch (err) {
+                              console.error('Error switching to back camera:', err)
+                            }
                           }
-                          setCurrentCameraId(backCamera.id)
-                          setIsBackCamera(true)
-                          if (isScanning) {
-                            setTimeout(() => {
-                              startScanningWithCamera(backCamera.id)
-                            }, 200)
-                          }
-                        } catch (err) {
-                          console.error('Error switching to back camera:', err)
-                        }
-                      }
-                    }}
-                    variant='outline'
-                    size='sm'
-                    className='touch-target h-10 w-full rounded-xl border border-orange-200 bg-orange-50 text-orange-700 hover:border-orange-300 hover:bg-orange-100'
-                  >
-                    📷 Sử dụng camera sau (khuyến nghị)
-                  </Button>
-                </motion.div>
-              )}
+                        }}
+                        variant='outline'
+                        size='sm'
+                        className='touch-target h-10 w-full rounded-xl border border-orange-200 bg-orange-50 text-orange-700 hover:border-orange-300 hover:bg-orange-100'
+                      >
+                        📷 Sử dụng camera sau (khuyến nghị)
+                      </Button>
+                    </motion.div>
+                  )}
 
-              {/* Debug button - development only */}
-              {process.env.NODE_ENV === 'development' && (
-                <motion.div whileTap={{ scale: 0.98 }}>
-                  <Button
-                    onClick={() => {
-                      const element = document.getElementById('qr-reader')
-                      console.log('Debug - Element exists:', !!element)
-                      console.log('Debug - Element classList:', element?.classList.toString())
-                      console.log('Debug - isScanning:', isScanning)
-                      console.log('Debug - Cameras:', cameras.length)
-                      console.log('Debug - Current camera:', currentCameraId)
-                    }}
-                    variant='outline'
-                    size='sm'
-                    className='touch-target h-8 w-full rounded-lg border border-gray-300 bg-gray-50 text-xs text-gray-600 hover:bg-gray-100'
-                  >
-                    🔍 Debug Element
-                  </Button>
-                </motion.div>
-              )}
-            </div>
-          </div>
-        </Card>
+                  {/* Debug button - development only */}
+                  {process.env.NODE_ENV === 'development' && (
+                    <motion.div whileTap={{ scale: 0.98 }}>
+                      <Button
+                        onClick={() => {
+                          const element = document.getElementById('qr-reader')
+                          console.log('Debug - Element exists:', !!element)
+                          console.log('Debug - Element classList:', element?.classList.toString())
+                          console.log('Debug - isScanning:', isScanning)
+                          console.log('Debug - Cameras:', cameras.length)
+                          console.log('Debug - Current camera:', currentCameraId)
+                        }}
+                        variant='outline'
+                        size='sm'
+                        className='touch-target h-8 w-full rounded-lg border border-gray-300 bg-gray-50 text-xs text-gray-600 hover:bg-gray-100'
+                      >
+                        🔍 Debug Element
+                      </Button>
+                    </motion.div>
+                  )}
+                </div>
+              </Card>
+            )}
 
-        {/* Instructions */}
-        <div className='mt-6 space-y-2 text-center'>
-          <div className='space-y-1 text-xs text-gray-500'>
-            <p>• Sử dụng camera sau để quét tốt hơn</p>
-            {!isBackCamera && cameras.length > 1 && <p className='font-medium text-orange-600'>⚠️ Khuyến nghị dùng camera sau</p>}
+            {/* Instructions - Only show when not scanning */}
+            {!isScanning && (
+              <div className='space-y-2 text-center'>
+                <p className='text-sm font-medium text-gray-700'>Hướng dẫn quét QR</p>
+                <div className='space-y-1 text-xs text-gray-500'>
+                  <p>• Camera sẽ mở toàn màn hình</p>
+                  <p>• Hướng camera vào mã QR</p>
+                  <p>• Sử dụng camera sau để quét tốt hơn</p>
+                  {!isBackCamera && cameras.length > 1 && <p className='font-medium text-orange-600'>⚠️ Khuyến nghị dùng camera sau</p>}
+                </div>
+              </div>
+            )}
           </div>
-        </div>
+        </ScrollArea>
       </div>
 
       {/* QR Response Modal */}
