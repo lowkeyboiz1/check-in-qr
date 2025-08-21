@@ -4,8 +4,8 @@ import { useEffect, useRef, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
-import { Html5QrcodeScanner } from 'html5-qrcode'
-import { Camera, CameraOff, Sparkles, X, User, Mail, Phone, CheckCircle, AlertCircle } from 'lucide-react'
+import { Html5Qrcode, Html5QrcodeSupportedFormats } from 'html5-qrcode'
+import { Camera, CameraOff, RotateCcw, X, User, Mail, Phone, CheckCircle, AlertCircle } from 'lucide-react'
 import { useSetAtom } from 'jotai'
 import { setCurrentGuestAtom, isLoadingAtom } from '@/store/atoms'
 import type { Guest } from '@/store/atoms'
@@ -25,12 +25,15 @@ interface QRResponseData {
 }
 
 export function QRScannerComponent({ onScanSuccess }: QRScannerProps) {
-  const scannerRef = useRef<Html5QrcodeScanner | null>(null)
+  const scannerRef = useRef<Html5Qrcode | null>(null)
   const [isScanning, setIsScanning] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [showModal, setShowModal] = useState(false)
   const [qrResponse, setQrResponse] = useState<QRResponseData | null>(null)
   const [isLoadingResponse, setIsLoadingResponse] = useState(false)
+  const [cameras, setCameras] = useState<any[]>([])
+  const [currentCameraId, setCurrentCameraId] = useState<string | null>(null)
+  const [isBackCamera, setIsBackCamera] = useState(true)
 
   const setCurrentGuest = useSetAtom(setCurrentGuestAtom)
   const setIsLoading = useSetAtom(isLoadingAtom)
@@ -46,80 +49,155 @@ export function QRScannerComponent({ onScanSuccess }: QRScannerProps) {
     })
   }
 
-  const startScanning = async () => {
+  const getCameras = async () => {
     try {
-      setError(null)
-      setIsScanning(true)
-      triggerWhaleConfetti()
+      const devices = await Html5Qrcode.getCameras()
+      setCameras(devices)
+
+      // Try to find back camera first (environment), then front camera
+      const backCamera = devices.find((device) => device.label.toLowerCase().includes('back') || device.label.toLowerCase().includes('rear') || device.label.toLowerCase().includes('environment'))
+
+      const frontCamera = devices.find((device) => device.label.toLowerCase().includes('front') || device.label.toLowerCase().includes('user') || device.label.toLowerCase().includes('facing'))
+
+      // Set initial camera (prefer back camera)
+      if (backCamera) {
+        setCurrentCameraId(backCamera.id)
+        setIsBackCamera(true)
+      } else if (frontCamera) {
+        setCurrentCameraId(frontCamera.id)
+        setIsBackCamera(false)
+      } else if (devices.length > 0) {
+        setCurrentCameraId(devices[0].id)
+        setIsBackCamera(true)
+      }
+
+      return devices
+    } catch (err) {
+      console.error('Error getting cameras:', err)
+      setError('Không thể truy cập camera: ' + (err as Error).message)
+      return []
+    }
+  }
+
+  const switchCamera = async () => {
+    if (cameras.length < 2) return
+
+    try {
+      // Stop current scanning
+      if (scannerRef.current && isScanning) {
+        await scannerRef.current.stop()
+      }
+
+      // Find the other camera
+      const currentIndex = cameras.findIndex((cam) => cam.id === currentCameraId)
+      const nextIndex = (currentIndex + 1) % cameras.length
+      const nextCamera = cameras[nextIndex]
+
+      setCurrentCameraId(nextCamera.id)
+      setIsBackCamera(!isBackCamera)
+
+      // Restart scanning with new camera
+      if (isScanning) {
+        setTimeout(() => {
+          startScanningWithCamera(nextCamera.id)
+        }, 100)
+      }
+    } catch (err) {
+      console.error('Error switching camera:', err)
+      setError('Không thể chuyển camera: ' + (err as Error).message)
+    }
+  }
+
+  const startScanningWithCamera = async (cameraId: string) => {
+    try {
+      const element = document.getElementById('qr-reader')
+      if (!element) {
+        throw new Error('QR reader element not found')
+      }
 
       if (scannerRef.current) {
+        await scannerRef.current.stop()
         scannerRef.current.clear()
       }
 
-      // Wait for DOM to update before initializing scanner
-      setTimeout(() => {
+      scannerRef.current = new Html5Qrcode('qr-reader')
+
+      const onScanSuccessCallback = async (decodedText: string, decodedResult: unknown) => {
+        console.log('QR Scan Result:', { decodedText, decodedResult })
+        setIsLoading(true)
         try {
-          const onScanSuccessCallback = async (decodedText: string, decodedResult: unknown) => {
-            console.log('QR Scan Result:', { decodedText, decodedResult })
-            setIsLoading(true)
-            try {
-              await handleScanResult(decodedText)
-              // Trigger whale confetti on successful scan
-              triggerWhaleConfetti()
-              onScanSuccess?.(decodedText)
-            } catch (err) {
-              setError('Lỗi xử lý dữ liệu QR: ' + (err as Error).message)
-            } finally {
-              setIsLoading(false)
-            }
-          }
-
-          const onScanFailure = (error: string) => {
-            // This callback will be called in case of qr code scan failure.
-            // Usually this callback will be called with "QR code not found" message.
-            // You can ignore this callback if you don't want to do anything on scan failure.
-          }
-
-          const config = {
-            fps: 10,
-            qrbox: { width: 250, height: 250 },
-            rememberLastUsedCamera: true,
-            supportedScanTypes: [0], // Only QR codes
-            facingMode: 'environment'
-          }
-
-          // Check if element exists before creating scanner
-          const element = document.getElementById('qr-reader')
-          if (!element) {
-            throw new Error('QR reader element not found')
-          }
-
-          scannerRef.current = new Html5QrcodeScanner(
-            'qr-reader',
-            config,
-            false // verbose
-          )
-
-          scannerRef.current.render(onScanSuccessCallback, onScanFailure)
+          await handleScanResult(decodedText)
+          triggerWhaleConfetti()
+          onScanSuccess?.(decodedText)
         } catch (err) {
-          setError('Không thể khởi tạo scanner: ' + (err as Error).message)
-          console.log({ err })
-          setIsScanning(false)
+          setError('Lỗi xử lý dữ liệu QR: ' + (err as Error).message)
+        } finally {
+          setIsLoading(false)
         }
-      }, 100) // Small delay to ensure DOM is updated
+      }
+
+      const onScanFailure = (error: string) => {
+        // This callback will be called in case of qr code scan failure.
+        // Usually this callback will be called with "QR code not found" message.
+        // You can ignore this callback if you don't want to do anything on scan failure.
+      }
+
+      const config = {
+        fps: 10,
+        qrbox: { width: 250, height: 250 },
+        aspectRatio: 1.0,
+        disableFlip: false,
+        formatsToSupport: [Html5QrcodeSupportedFormats.QR_CODE]
+      }
+
+      await scannerRef.current.start(cameraId, config, onScanSuccessCallback, onScanFailure)
+
+      setIsScanning(true)
     } catch (err) {
+      console.error('Error starting scanner:', err)
       setError('Không thể khởi tạo scanner: ' + (err as Error).message)
-      console.log({ err })
       setIsScanning(false)
     }
   }
 
-  const stopScanning = () => {
-    if (scannerRef.current) {
-      scannerRef.current.clear().catch(console.error)
-      scannerRef.current = null
+  const startScanning = async () => {
+    try {
+      setError(null)
+      triggerWhaleConfetti()
+
+      // Get cameras if not already available
+      if (cameras.length === 0) {
+        await getCameras()
+      }
+
+      // Use current camera or fall back to first available
+      const cameraToUse = currentCameraId || (cameras.length > 0 ? cameras[0].id : null)
+
+      if (!cameraToUse) {
+        setError('Không tìm thấy camera nào')
+        return
+      }
+
+      await startScanningWithCamera(cameraToUse)
+    } catch (err) {
+      setError('Không thể khởi tạo scanner: ' + (err as Error).message)
+      console.error({ err })
+      setIsScanning(false)
     }
-    setIsScanning(false)
+  }
+
+  const stopScanning = async () => {
+    try {
+      if (scannerRef.current) {
+        await scannerRef.current.stop()
+        scannerRef.current.clear()
+        scannerRef.current = null
+      }
+      setIsScanning(false)
+    } catch (err) {
+      console.error('Error stopping scanner:', err)
+      setIsScanning(false)
+    }
   }
 
   const handleScanResult = async (data: string) => {
@@ -199,6 +277,9 @@ export function QRScannerComponent({ onScanSuccess }: QRScannerProps) {
   }
 
   useEffect(() => {
+    // Initialize cameras on component mount
+    getCameras()
+
     return () => {
       stopScanning()
     }
@@ -274,30 +355,47 @@ export function QRScannerComponent({ onScanSuccess }: QRScannerProps) {
               )}
             </div>
 
-            {/* Action Button */}
-            <motion.div whileTap={{ scale: 0.98 }}>
-              <Button
-                onClick={isScanning ? stopScanning : startScanning}
-                size='lg'
-                className={`touch-target h-14 w-full rounded-2xl text-base font-semibold shadow-lg transition-all duration-200 ${
-                  isScanning
-                    ? 'bg-gradient-to-r from-red-500 to-red-600 text-white shadow-red-200 hover:from-red-600 hover:to-red-700'
-                    : 'bg-gradient-to-r from-blue-600 to-blue-700 text-white shadow-blue-200 hover:from-blue-700 hover:to-blue-800'
-                }`}
-              >
-                {isScanning ? (
-                  <>
-                    <CameraOff className='mr-2 h-5 w-5' />
-                    Dừng quét
-                  </>
-                ) : (
-                  <>
-                    <Camera className='mr-2 h-5 w-5' />
-                    Bắt đầu quét
-                  </>
-                )}
-              </Button>
-            </motion.div>
+            {/* Action Buttons */}
+            <div className='space-y-3'>
+              <motion.div whileTap={{ scale: 0.98 }}>
+                <Button
+                  onClick={isScanning ? stopScanning : startScanning}
+                  size='lg'
+                  className={`touch-target h-14 w-full rounded-2xl text-base font-semibold shadow-lg transition-all duration-200 ${
+                    isScanning
+                      ? 'bg-gradient-to-r from-red-500 to-red-600 text-white shadow-red-200 hover:from-red-600 hover:to-red-700'
+                      : 'bg-gradient-to-r from-blue-600 to-blue-700 text-white shadow-blue-200 hover:from-blue-700 hover:to-blue-800'
+                  }`}
+                >
+                  {isScanning ? (
+                    <>
+                      <CameraOff className='mr-2 h-5 w-5' />
+                      Dừng quét
+                    </>
+                  ) : (
+                    <>
+                      <Camera className='mr-2 h-5 w-5' />
+                      Bắt đầu quét
+                    </>
+                  )}
+                </Button>
+              </motion.div>
+
+              {/* Camera Switch Button */}
+              {cameras.length > 1 && (
+                <motion.div whileTap={{ scale: 0.98 }}>
+                  <Button
+                    onClick={switchCamera}
+                    variant='outline'
+                    size='lg'
+                    className='touch-target h-12 w-full rounded-2xl border-2 border-gray-200 bg-white text-gray-700 hover:border-gray-300 hover:bg-gray-50'
+                  >
+                    <RotateCcw className='mr-2 h-4 w-4' />
+                    {isBackCamera ? 'Chuyển sang camera trước' : 'Chuyển sang camera sau'}
+                  </Button>
+                </motion.div>
+              )}
+            </div>
           </div>
         </Card>
 
