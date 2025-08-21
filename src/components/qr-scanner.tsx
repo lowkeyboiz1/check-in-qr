@@ -100,7 +100,7 @@ export function QRScannerComponent({ onScanSuccess }: QRScannerProps) {
       if (isScanning) {
         setTimeout(() => {
           startScanningWithCamera(nextCamera.id)
-        }, 100)
+        }, 200)
       }
     } catch (err) {
       console.error('Error switching camera:', err)
@@ -108,12 +108,34 @@ export function QRScannerComponent({ onScanSuccess }: QRScannerProps) {
     }
   }
 
+  const waitForElement = (id: string, timeout = 5000): Promise<HTMLElement> => {
+    return new Promise((resolve, reject) => {
+      const startTime = Date.now()
+
+      const checkElement = () => {
+        const element = document.getElementById(id)
+        if (element) {
+          resolve(element)
+          return
+        }
+
+        if (Date.now() - startTime > timeout) {
+          reject(new Error(`Element with id '${id}' not found within ${timeout}ms`))
+          return
+        }
+
+        // Check again in next frame
+        requestAnimationFrame(checkElement)
+      }
+
+      checkElement()
+    })
+  }
+
   const startScanningWithCamera = async (cameraId: string) => {
     try {
-      const element = document.getElementById('qr-reader')
-      if (!element) {
-        throw new Error('QR reader element not found')
-      }
+      // Wait for the element to be available in the DOM
+      await waitForElement('qr-reader')
 
       if (scannerRef.current) {
         await scannerRef.current.stop()
@@ -164,6 +186,9 @@ export function QRScannerComponent({ onScanSuccess }: QRScannerProps) {
     try {
       setError(null)
       triggerWhaleConfetti()
+
+      // Small delay to ensure DOM is fully ready, especially after tab switching
+      await new Promise((resolve) => setTimeout(resolve, 100))
 
       // Get cameras if not already available
       if (cameras.length === 0) {
