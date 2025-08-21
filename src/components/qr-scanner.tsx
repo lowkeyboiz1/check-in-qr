@@ -49,26 +49,77 @@ export function QRScannerComponent({ onScanSuccess }: QRScannerProps) {
     })
   }
 
+  // Request camera permissions and get available cameras
+  const requestCameraPermission = async () => {
+    try {
+      // Request camera permission explicitly
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: {
+          facingMode: 'environment' // Prefer back camera
+        }
+      })
+      // Stop the stream immediately after getting permission
+      stream.getTracks().forEach((track) => track.stop())
+      return true
+    } catch (err) {
+      console.error('Camera permission denied:', err)
+      setError('Cần cấp quyền truy cập camera để quét mã QR')
+      return false
+    }
+  }
+
   const getCameras = async () => {
     try {
+      // First request camera permission
+      const hasPermission = await requestCameraPermission()
+      if (!hasPermission) return []
+
       const devices = await Html5Qrcode.getCameras()
+      console.log('Available cameras:', devices)
       setCameras(devices)
 
-      // Try to find back camera first (environment), then front camera
-      const backCamera = devices.find((device) => device.label.toLowerCase().includes('back') || device.label.toLowerCase().includes('rear') || device.label.toLowerCase().includes('environment'))
+      // Enhanced camera detection logic - prefer back camera for mobile QR scanning
+      const backCamera = devices.find((device) => {
+        const label = device.label.toLowerCase()
+        return (
+          label.includes('back') ||
+          label.includes('rear') ||
+          label.includes('environment') ||
+          label.includes('main') ||
+          // Some devices use index-based naming, back camera is often the first or second
+          (devices.length > 1 && devices.indexOf(device) === 0) ||
+          // Check for specific mobile camera patterns
+          label.includes('camera 0') ||
+          label.includes('camera2 0')
+        )
+      })
 
-      const frontCamera = devices.find((device) => device.label.toLowerCase().includes('front') || device.label.toLowerCase().includes('user') || device.label.toLowerCase().includes('facing'))
+      const frontCamera = devices.find((device) => {
+        const label = device.label.toLowerCase()
+        return label.includes('front') || label.includes('user') || label.includes('facing') || label.includes('selfie') || label.includes('camera 1') || label.includes('camera2 1')
+      })
 
-      // Set initial camera (prefer back camera)
+      console.log('Back camera found:', backCamera)
+      console.log('Front camera found:', frontCamera)
+
+      // Set initial camera (strongly prefer back camera for QR scanning)
       if (backCamera) {
         setCurrentCameraId(backCamera.id)
         setIsBackCamera(true)
+        console.log('Using back camera:', backCamera.id)
+      } else if (devices.length > 1) {
+        // If multiple cameras but can't identify back camera, try the first one
+        setCurrentCameraId(devices[0].id)
+        setIsBackCamera(true)
+        console.log('Using first camera as back camera:', devices[0].id)
       } else if (frontCamera) {
         setCurrentCameraId(frontCamera.id)
         setIsBackCamera(false)
+        console.log('Using front camera:', frontCamera.id)
       } else if (devices.length > 0) {
         setCurrentCameraId(devices[0].id)
         setIsBackCamera(true)
+        console.log('Using first available camera:', devices[0].id)
       }
 
       return devices
@@ -115,11 +166,13 @@ export function QRScannerComponent({ onScanSuccess }: QRScannerProps) {
       const checkElement = () => {
         const element = document.getElementById(id)
         if (element) {
+          console.log(`Element '${id}' found after ${Date.now() - startTime}ms`)
           resolve(element)
           return
         }
 
         if (Date.now() - startTime > timeout) {
+          console.error(`Element '${id}' not found within ${timeout}ms`)
           reject(new Error(`Element with id '${id}' not found within ${timeout}ms`))
           return
         }
@@ -128,20 +181,51 @@ export function QRScannerComponent({ onScanSuccess }: QRScannerProps) {
         requestAnimationFrame(checkElement)
       }
 
+      // Start checking immediately
       checkElement()
     })
   }
 
   const startScanningWithCamera = async (cameraId: string) => {
     try {
-      // Wait for the element to be available in the DOM
-      await waitForElement('qr-reader')
+      console.log('Starting scanner with camera:', cameraId)
 
-      if (scannerRef.current) {
-        await scannerRef.current.stop()
-        scannerRef.current.clear()
+      // Wait for element to be available and retry if needed
+      let qrReaderElement = document.getElementById('qr-reader')
+      let retries = 0
+      const maxRetries = 10
+
+      while (!qrReaderElement && retries < maxRetries) {
+        console.log(`Waiting for qr-reader element... attempt ${retries + 1}`)
+        await new Promise((resolve) => setTimeout(resolve, 100))
+        qrReaderElement = document.getElementById('qr-reader')
+        retries++
       }
 
+      if (!qrReaderElement) {
+        console.error('qr-reader element not found after retries')
+        setError('Không tìm thấy element quét QR. Vui lòng thử lại.')
+        setIsScanning(false)
+        return
+      }
+
+      console.log('qr-reader element found, proceeding with scanner initialization')
+
+      // Clean up existing scanner
+      if (scannerRef.current) {
+        try {
+          await scannerRef.current.stop()
+          scannerRef.current.clear()
+        } catch (err) {
+          console.log('Error cleaning up existing scanner:', err)
+        }
+        scannerRef.current = null
+      }
+
+      // Wait a bit for cleanup
+      await new Promise((resolve) => setTimeout(resolve, 100))
+
+      // Create new scanner instance
       scannerRef.current = new Html5Qrcode('qr-reader')
 
       const onScanSuccessCallback = async (decodedText: string, decodedResult: unknown) => {
@@ -164,12 +248,24 @@ export function QRScannerComponent({ onScanSuccess }: QRScannerProps) {
         // You can ignore this callback if you don't want to do anything on scan failure.
       }
 
+      // Enhanced configuration for better mobile QR scanning
       const config = {
         fps: 10,
         qrbox: { width: 250, height: 250 },
         aspectRatio: 1.0,
         disableFlip: false,
-        formatsToSupport: [Html5QrcodeSupportedFormats.QR_CODE]
+        formatsToSupport: [Html5QrcodeSupportedFormats.QR_CODE],
+        // Additional camera constraints for better mobile experience
+        videoConstraints: {
+          width: { ideal: 1280 },
+          height: { ideal: 720 },
+          facingMode: isBackCamera ? 'environment' : 'user',
+          focusMode: 'continuous'
+        },
+        // Optimize for mobile performance
+        experimentalFeatures: {
+          useBarCodeDetectorIfSupported: true
+        }
       }
 
       await scannerRef.current.start(cameraId, config, onScanSuccessCallback, onScanFailure)
@@ -187,12 +283,16 @@ export function QRScannerComponent({ onScanSuccess }: QRScannerProps) {
       setError(null)
       triggerWhaleConfetti()
 
-      // Small delay to ensure DOM is fully ready, especially after tab switching
-      await new Promise((resolve) => setTimeout(resolve, 100))
+      console.log('Starting QR scanning...')
 
       // Get cameras if not already available
       if (cameras.length === 0) {
-        await getCameras()
+        console.log('Getting cameras...')
+        const availableCameras = await getCameras()
+        if (availableCameras.length === 0) {
+          setError('Không tìm thấy camera nào')
+          return
+        }
       }
 
       // Use current camera or fall back to first available
@@ -203,10 +303,17 @@ export function QRScannerComponent({ onScanSuccess }: QRScannerProps) {
         return
       }
 
+      // Set scanning state first to show the element
+      setIsScanning(true)
+
+      // Wait for React to render the element
+      await new Promise((resolve) => setTimeout(resolve, 100))
+
+      console.log('Using camera:', cameraToUse)
       await startScanningWithCamera(cameraToUse)
     } catch (err) {
       setError('Không thể khởi tạo scanner: ' + (err as Error).message)
-      console.error({ err })
+      console.error('Error starting scanner:', err)
       setIsScanning(false)
     }
   }
@@ -303,12 +410,34 @@ export function QRScannerComponent({ onScanSuccess }: QRScannerProps) {
 
   useEffect(() => {
     // Initialize cameras on component mount
-    getCameras()
+    const initializeCamera = async () => {
+      try {
+        console.log('Initializing camera on mount...')
+        await getCameras()
+      } catch (err) {
+        console.error('Error initializing camera:', err)
+      }
+    }
+
+    initializeCamera()
 
     return () => {
+      console.log('Component unmounting, stopping scanner...')
       stopScanning()
     }
   }, [])
+
+  // Additional effect to ensure DOM element exists when scanning state changes
+  useEffect(() => {
+    if (isScanning) {
+      const element = document.getElementById('qr-reader')
+      if (!element) {
+        console.error('qr-reader element missing while scanning is true')
+        setIsScanning(false)
+        setError('Element quét QR bị thiếu. Vui lòng refresh trang.')
+      }
+    }
+  }, [isScanning])
 
   return (
     <div className='flex h-full flex-col bg-gradient-to-br from-slate-50 via-white to-slate-50/50'>
@@ -317,7 +446,8 @@ export function QRScannerComponent({ onScanSuccess }: QRScannerProps) {
         <div className='flex items-center justify-between'>
           <div className='flex-1 text-center'>
             <h1 className='text-2xl font-bold text-gray-900'>Quét mã QR</h1>
-            <p className='mt-1 text-sm text-gray-600'>Hướng camera vào mã QR của khách</p>
+            <p className='mt-1 text-sm text-gray-600'>{isScanning ? `Đang sử dụng camera ${isBackCamera ? 'sau' : 'trước'}` : 'Hướng camera vào mã QR của khách'}</p>
+            {cameras.length > 0 && <p className='mt-1 text-xs text-gray-500'>Có {cameras.length} camera khả dụng</p>}
           </div>
         </div>
       </div>
@@ -329,7 +459,22 @@ export function QRScannerComponent({ onScanSuccess }: QRScannerProps) {
           <div className='mb-4 rounded-2xl border border-red-200 bg-red-50 p-4'>
             <div className='flex items-center gap-2'>
               <div className='h-2 w-2 flex-shrink-0 rounded-full bg-red-500' />
-              <p className='text-sm font-medium text-red-700'>{error}</p>
+              <div className='flex-1'>
+                <p className='text-sm font-medium text-red-700'>{error}</p>
+                {error.includes('Element') && (
+                  <Button
+                    onClick={() => {
+                      setError(null)
+                      window.location.reload()
+                    }}
+                    size='sm'
+                    variant='outline'
+                    className='mt-2 border-red-300 text-red-700 hover:bg-red-100'
+                  >
+                    Refresh trang
+                  </Button>
+                )}
+              </div>
             </div>
           </div>
         )}
@@ -339,9 +484,17 @@ export function QRScannerComponent({ onScanSuccess }: QRScannerProps) {
           <div className='space-y-6'>
             {/* Camera Viewport */}
             <div className='relative aspect-square overflow-hidden rounded-2xl bg-gradient-to-br from-gray-50 to-gray-100'>
+              {/* Always render qr-reader element, but conditionally show content */}
+              <div id='qr-reader' className={`h-full w-full ${!isScanning ? 'hidden' : ''}`} onLoad={() => console.log('qr-reader element loaded')} />
+
               {isScanning ? (
                 <>
-                  <div id='qr-reader' className='h-full w-full' />
+                  {/* Debug info in development */}
+                  {process.env.NODE_ENV === 'development' && (
+                    <div className='absolute top-2 left-2 z-10 rounded bg-black/50 px-2 py-1 text-xs text-white'>
+                      Camera: {isBackCamera ? 'Back' : 'Front'} | ID: {currentCameraId?.slice(-4)}
+                    </div>
+                  )}
                   {/* Scanning Overlay */}
                   <div className='pointer-events-none absolute inset-0'>
                     <div className='absolute inset-4 rounded-2xl border-2 border-white shadow-lg'>
@@ -420,17 +573,71 @@ export function QRScannerComponent({ onScanSuccess }: QRScannerProps) {
                   </Button>
                 </motion.div>
               )}
+
+              {/* Force Back Camera Button - if not using back camera */}
+              {cameras.length > 1 && !isBackCamera && (
+                <motion.div whileTap={{ scale: 0.98 }}>
+                  <Button
+                    onClick={async () => {
+                      const backCamera = cameras.find((device) => {
+                        const label = device.label.toLowerCase()
+                        return label.includes('back') || label.includes('rear') || label.includes('environment') || label.includes('main')
+                      })
+                      if (backCamera) {
+                        try {
+                          if (scannerRef.current && isScanning) {
+                            await scannerRef.current.stop()
+                          }
+                          setCurrentCameraId(backCamera.id)
+                          setIsBackCamera(true)
+                          if (isScanning) {
+                            setTimeout(() => {
+                              startScanningWithCamera(backCamera.id)
+                            }, 200)
+                          }
+                        } catch (err) {
+                          console.error('Error switching to back camera:', err)
+                        }
+                      }
+                    }}
+                    variant='outline'
+                    size='sm'
+                    className='touch-target h-10 w-full rounded-xl border border-orange-200 bg-orange-50 text-orange-700 hover:border-orange-300 hover:bg-orange-100'
+                  >
+                    📷 Sử dụng camera sau (khuyến nghị)
+                  </Button>
+                </motion.div>
+              )}
+
+              {/* Debug button - development only */}
+              {process.env.NODE_ENV === 'development' && (
+                <motion.div whileTap={{ scale: 0.98 }}>
+                  <Button
+                    onClick={() => {
+                      const element = document.getElementById('qr-reader')
+                      console.log('Debug - Element exists:', !!element)
+                      console.log('Debug - Element classList:', element?.classList.toString())
+                      console.log('Debug - isScanning:', isScanning)
+                      console.log('Debug - Cameras:', cameras.length)
+                      console.log('Debug - Current camera:', currentCameraId)
+                    }}
+                    variant='outline'
+                    size='sm'
+                    className='touch-target h-8 w-full rounded-lg border border-gray-300 bg-gray-50 text-xs text-gray-600 hover:bg-gray-100'
+                  >
+                    🔍 Debug Element
+                  </Button>
+                </motion.div>
+              )}
             </div>
           </div>
         </Card>
 
         {/* Instructions */}
         <div className='mt-6 space-y-2 text-center'>
-          <p className='text-sm font-medium text-gray-700'>Hướng dẫn sử dụng</p>
           <div className='space-y-1 text-xs text-gray-500'>
-            <p>• Đặt mã QR trong khung vuông</p>
-            <p>• Giữ điện thoại ổn định</p>
-            <p>• Đảm bảo ánh sáng đủ</p>
+            <p>• Sử dụng camera sau để quét tốt hơn</p>
+            {!isBackCamera && cameras.length > 1 && <p className='font-medium text-orange-600'>⚠️ Khuyến nghị dùng camera sau</p>}
           </div>
         </div>
       </div>
