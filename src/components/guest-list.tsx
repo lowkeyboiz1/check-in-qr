@@ -8,7 +8,19 @@ import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { GuestFilterModal } from '@/components/guest-filter-modal'
 import { AddGuestModal } from '@/components/add-guest-modal'
-import { guestsAtom, checkedInCountAtom, toggleGuestCheckInAtom, guestFiltersAtom, showAddGuestModalAtom, updateGuestFiltersAtom, filteredGuestsAtom, Guest } from '@/store/atoms'
+import {
+  guestsAtom,
+  checkedInCountAtom,
+  toggleGuestCheckInAtom,
+  guestFiltersAtom,
+  showAddGuestModalAtom,
+  updateGuestFiltersAtom,
+  filteredGuestsAtom,
+  Guest,
+  addGuestAtom,
+  newlyAddedGuestAtom,
+  showNewGuestAddedModalAtom
+} from '@/store/atoms'
 import { User, Mail, Phone, UserCheck, UserX, Search, Plus, SlidersHorizontal, X, ArrowUpDown } from 'lucide-react'
 import { ScrollArea } from '@/components/ui/scroll-area'
 
@@ -107,6 +119,140 @@ const MOCK_GUESTS: Guest[] = [
   }
 ]
 
+// New Guest Added Modal Component
+function NewGuestAddedModal({
+  guest,
+  isOpen,
+  onClose,
+  mockGuests,
+  setMockGuests,
+  handleToggleCheckIn: parentHandleToggleCheckIn
+}: {
+  guest: Guest | null
+  isOpen: boolean
+  onClose: () => void
+  mockGuests: Guest[]
+  setMockGuests: React.Dispatch<React.SetStateAction<Guest[]>>
+  handleToggleCheckIn: (guestId: string) => void
+}) {
+  const buttonRef = useRef<HTMLButtonElement | null>(null)
+  const [isCheckingIn, setIsCheckingIn] = useState(false)
+  const [allGuests] = useAtom(guestsAtom)
+
+  if (!guest) return null
+
+  // Get the current state of the guest (either from atoms or mock data)
+  const currentGuest = MOCK_DATA_MODE ? mockGuests.find((g) => g.id === guest.id) || guest : allGuests.find((g) => g.id === guest.id) || guest
+
+  const handleToggleCheckIn = () => {
+    setIsCheckingIn(true)
+    setTimeout(() => {
+      parentHandleToggleCheckIn(guest.id)
+      setIsCheckingIn(false)
+    }, 300)
+  }
+
+  return (
+    <AnimatePresence>
+      {isOpen && (
+        <div className='fixed inset-0 z-50 flex items-center justify-center p-4'>
+          {/* Backdrop */}
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={onClose} className='absolute inset-0 bg-black/50 backdrop-blur-sm' />
+
+          {/* Modal Content */}
+          <motion.div initial={{ opacity: 0, scale: 0.9, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.9, y: 20 }} className='relative z-10 w-full max-w-sm'>
+            <Card className='relative overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-xl'>
+              {/* Success Header */}
+              <div className='bg-gradient-to-r from-emerald-500 to-emerald-600 px-4 py-4 text-white'>
+                <div className='flex items-center gap-2'>
+                  <div className='flex h-8 w-8 items-center justify-center rounded-full bg-white/20'>
+                    <UserCheck className='h-4 w-4' />
+                  </div>
+                  <div>
+                    <h3 className='font-semibold'>Thêm khách thành công!</h3>
+                    <p className='text-sm text-emerald-100'>Khách mới đã được thêm vào danh sách</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Guest Card Content */}
+              <div className='p-4'>
+                {/* Header Row - Status and Action */}
+                <div className='mb-3 flex items-center justify-between'>
+                  {/* Status Badge */}
+                  <div
+                    className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-sm font-medium ${
+                      currentGuest.isCheckedIn ? 'border border-emerald-200 bg-emerald-100 text-emerald-700' : 'border border-amber-200 bg-amber-100 text-amber-700'
+                    }`}
+                  >
+                    <div className={`h-2 w-2 rounded-full ${currentGuest.isCheckedIn ? 'bg-emerald-500' : 'bg-amber-500'}`} />
+                    {currentGuest.isCheckedIn ? 'Đã check-in' : 'Chưa đến'}
+                  </div>
+
+                  {/* Check-in Button */}
+                  <motion.div whileTap={{ scale: 0.95 }}>
+                    <Button
+                      ref={buttonRef}
+                      onClick={handleToggleCheckIn}
+                      disabled={isCheckingIn}
+                      size='sm'
+                      className={`touch-target h-9 rounded-xl px-4 font-medium shadow-sm transition-all duration-200 ${
+                        currentGuest.isCheckedIn ? 'bg-amber-500 text-white shadow-amber-200 hover:bg-amber-600' : 'bg-emerald-500 text-white shadow-emerald-200 hover:bg-emerald-600'
+                      }`}
+                    >
+                      {isCheckingIn ? (
+                        <div className='h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent' />
+                      ) : currentGuest.isCheckedIn ? (
+                        <>
+                          <UserX className='mr-1.5 h-4 w-4' />
+                          Check-out
+                        </>
+                      ) : (
+                        <>
+                          <UserCheck className='mr-1.5 h-4 w-4' />
+                          Check-in
+                        </>
+                      )}
+                    </Button>
+                  </motion.div>
+                </div>
+
+                {/* Guest Info */}
+                <div className='space-y-2'>
+                  {/* Name */}
+                  <h3 className='text-base leading-snug font-semibold text-gray-900'>{currentGuest.name}</h3>
+
+                  {/* Contact Details */}
+                  <div className='space-y-1.5 text-sm text-gray-600'>
+                    <div className='flex items-center gap-2'>
+                      <Mail className='h-4 w-4 flex-shrink-0 text-gray-400' />
+                      <span className='truncate font-medium'>{currentGuest.email}</span>
+                    </div>
+                    <div className='flex items-center gap-2'>
+                      <Phone className='h-4 w-4 flex-shrink-0 text-gray-400' />
+                      <span className='font-medium'>{currentGuest.phone}</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Close Button */}
+                <div className='mt-4 flex justify-end'>
+                  <Button onClick={onClose} variant='outline' size='sm' className='rounded-xl px-4'>
+                    Đóng
+                  </Button>
+                </div>
+              </div>
+
+              {/* Subtle Status Indicator */}
+              <div className={`absolute top-0 right-0 left-0 h-1 ${currentGuest.isCheckedIn ? 'bg-gradient-to-r from-emerald-400 to-emerald-500' : 'bg-gradient-to-r from-amber-400 to-orange-500'}`} />
+            </Card>
+          </motion.div>
+        </div>
+      )}
+    </AnimatePresence>
+  )
+}
+
 export function GuestList() {
   const [allGuests] = useAtom(guestsAtom)
   const [checkedInCount] = useAtom(checkedInCountAtom)
@@ -115,7 +261,27 @@ export function GuestList() {
   const toggleCheckIn = useSetAtom(toggleGuestCheckInAtom)
   const setShowAddModal = useSetAtom(showAddGuestModalAtom)
   const updateFilters = useSetAtom(updateGuestFiltersAtom)
+  const addGuest = useSetAtom(addGuestAtom)
 
+  // Handler for adding guests in mock mode
+  const handleAddGuest = (guestData: Omit<Guest, 'id' | 'createdAt' | 'isCheckedIn'>) => {
+    if (MOCK_DATA_MODE) {
+      const newGuest: Guest = {
+        ...guestData,
+        id: Date.now().toString() + Math.random().toString(36).substr(2, 9),
+        createdAt: new Date().toISOString(),
+        isCheckedIn: false
+      }
+      setMockGuests((prev) => [...prev, newGuest])
+      setNewlyAddedGuest(newGuest)
+      setShowNewGuestAddedModal(true)
+    } else {
+      addGuest(guestData)
+    }
+  }
+
+  const [newlyAddedGuest, setNewlyAddedGuest] = useAtom(newlyAddedGuestAtom)
+  const [showNewGuestAddedModal, setShowNewGuestAddedModal] = useAtom(showNewGuestAddedModalAtom)
   const [showFilterModal, setShowFilterModal] = useState(false)
   const [mockGuests, setMockGuests] = useState<Guest[]>(MOCK_GUESTS)
   const [floatingAnimations, setFloatingAnimations] = useState<Array<{ id: string; x: number; y: number; timestamp: number }>>([])
@@ -531,7 +697,18 @@ export function GuestList() {
 
         {/* Modals */}
         <GuestFilterModal isOpen={showFilterModal} onClose={() => setShowFilterModal(false)} />
-        <AddGuestModal />
+        <AddGuestModal onAddGuest={MOCK_DATA_MODE ? handleAddGuest : undefined} />
+        <NewGuestAddedModal
+          guest={newlyAddedGuest}
+          isOpen={showNewGuestAddedModal}
+          onClose={() => {
+            setShowNewGuestAddedModal(false)
+            setNewlyAddedGuest(null)
+          }}
+          mockGuests={mockGuests}
+          setMockGuests={setMockGuests}
+          handleToggleCheckIn={handleToggleCheckIn}
+        />
       </div>
 
       {/* Floating Check-in Animations */}

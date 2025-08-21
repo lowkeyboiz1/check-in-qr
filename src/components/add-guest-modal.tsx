@@ -8,11 +8,11 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
-import { showAddGuestModalAtom, addGuestAtom, isLoadingAtom } from '@/store/atoms'
+import { showAddGuestModalAtom, addGuestAtom, isLoadingAtom, newlyAddedGuestAtom, showNewGuestAddedModalAtom, Guest } from '@/store/atoms'
 import { guestFormSchema, type GuestFormData } from '@/lib/validations'
 import { User, Mail, Phone, Plus, X } from 'lucide-react'
 
-export function AddGuestModal() {
+export function AddGuestModal({ onAddGuest }: { onAddGuest?: (guest: Omit<Guest, 'id' | 'createdAt' | 'isCheckedIn'>) => void }) {
   const [showModal, setShowModal] = useAtom(showAddGuestModalAtom)
   const [isLoading] = useAtom(isLoadingAtom)
   const addGuest = useSetAtom(addGuestAtom)
@@ -33,11 +33,18 @@ export function AddGuestModal() {
   })
 
   const onSubmit = (data: GuestFormData) => {
-    addGuest({
+    const guestData = {
       name: data.name.trim(),
       email: data.email.trim().toLowerCase(),
       phone: data.phone.trim()
-    })
+    }
+
+    // Use custom callback if provided (for mock mode), otherwise use atom
+    if (onAddGuest) {
+      onAddGuest(guestData)
+    } else {
+      addGuest(guestData)
+    }
 
     // Reset form and close modal
     reset()

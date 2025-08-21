@@ -34,6 +34,8 @@ export const guestsAtom = atom<Guest[]>([])
 export const currentGuestAtom = atom<Guest | null>(null)
 export const showGuestModalAtom = atom<boolean>(false)
 export const showAddGuestModalAtom = atom<boolean>(false)
+export const newlyAddedGuestAtom = atom<Guest | null>(null)
+export const showNewGuestAddedModalAtom = atom<boolean>(false)
 export const activeTabAtom = atom<'scan' | 'guests' | 'settings'>('scan')
 export const isLoadingAtom = atom<boolean>(false)
 export const guestFiltersAtom = atom<GuestFilters>({
@@ -105,6 +107,9 @@ export const addGuestAtom = atom(null, (get, set, guest: Omit<Guest, 'id' | 'cre
     isCheckedIn: false
   }
   set(guestsAtom, (prev) => [...prev, newGuest])
+  set(newlyAddedGuestAtom, newGuest)
+  set(showNewGuestAddedModalAtom, true)
+  return newGuest
 })
 
 export const checkInGuestAtom = atom(null, (get, set, guestId: string) => {
