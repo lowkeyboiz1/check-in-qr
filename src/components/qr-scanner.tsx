@@ -84,7 +84,8 @@ export function QRScannerComponent({ onScanSuccess }: QRScannerProps) {
             fps: 10,
             qrbox: { width: 250, height: 250 },
             rememberLastUsedCamera: true,
-            supportedScanTypes: [0] // Only QR codes
+            supportedScanTypes: [0], // Only QR codes
+            facingMode: 'environment'
           }
 
           // Check if element exists before creating scanner
