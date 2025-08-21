@@ -8,15 +8,16 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
-import { showAddGuestModalAtom, addGuestAtom, isLoadingAtom, newlyAddedGuestAtom, showNewGuestAddedModalAtom, Guest } from '@/store/atoms'
+import { showAddGuestModalAtom, addGuestAtom, isLoadingAtom, showNewGuestAddedModalAtom, Guest } from '@/store/atoms'
 import { guestFormSchema, type GuestFormData } from '@/lib/validations'
 import { User, Mail, Phone, Plus, X } from 'lucide-react'
+import { FloatingAnimation } from '@/components/floating-animation'
 
 export function AddGuestModal({ onAddGuest }: { onAddGuest?: (guest: Omit<Guest, 'id' | 'createdAt' | 'isCheckedIn'>) => void }) {
   const [showModal, setShowModal] = useAtom(showAddGuestModalAtom)
   const [isLoading] = useAtom(isLoadingAtom)
   const addGuest = useSetAtom(addGuestAtom)
-
+  const [showNewGuestAddedModal] = useAtom(showNewGuestAddedModalAtom)
   const {
     register,
     handleSubmit,
@@ -79,23 +80,26 @@ export function AddGuestModal({ onAddGuest }: { onAddGuest?: (guest: Omit<Guest,
               <Input {...register('phone')} type='tel' label='Số điện thoại' icon={<Phone className='h-4 w-4' />} placeholder='Nhập số điện thoại...' error={errors.phone} required />
 
               {/* Action Buttons */}
-              <div className='space-y-3 border-t pt-4'>
-                <motion.div whileTap={{ scale: 0.98 }}>
-                  <Button type='submit' className='w-full bg-blue-600 text-white hover:bg-blue-700' disabled={isLoading || !isValid}>
+              <div className='flex gap-2 border-t pt-4'>
+                <Button type='button' onClick={handleClose} variant='outline' className='flex-1' disabled={isLoading}>
+                  <X className='mr-2 h-4 w-4' />
+                  Hủy
+                </Button>
+                {/* Add Only Button */}
+                <motion.div whileTap={{ scale: 0.98 }} className='flex-1'>
+                  <Button type='submit' variant='outline' className='w-full border-blue-600 text-blue-600 hover:bg-blue-50' disabled={isLoading || !isValid}>
                     <Plus className='mr-2 h-4 w-4' />
                     {isLoading ? 'Đang thêm...' : 'Thêm khách'}
                   </Button>
                 </motion.div>
-
-                <Button type='button' onClick={handleClose} variant='outline' className='w-full' disabled={isLoading}>
-                  <X className='mr-2 h-4 w-4' />
-                  Hủy
-                </Button>
               </div>
             </form>
           </Card>
         </motion.div>
       </DialogContent>
+
+      {/* Floating Animation */}
+      <FloatingAnimation />
     </Dialog>
   )
 }

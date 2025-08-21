@@ -163,3 +163,34 @@ export const setCurrentGuestAtom = atom(null, (get, set, guest: Guest | null) =>
 export const updateGuestFiltersAtom = atom(null, (get, set, filters: Partial<GuestFilters>) => {
   set(guestFiltersAtom, (prev) => ({ ...prev, ...filters }))
 })
+
+// Floating animation atoms
+export interface FloatingAnimation {
+  id: string
+  x: number
+  y: number
+  timestamp: number
+}
+
+export const floatingAnimationsAtom = atom<FloatingAnimation[]>([])
+
+export const triggerFloatingAnimationAtom = atom(null, (get, set, x: number, y: number) => {
+  const now = Date.now()
+  const animationId = `animation-${now}-${Math.random().toString(36).substr(2, 9)}`
+
+  // Add new animation
+  set(floatingAnimationsAtom, (prev) => [
+    ...prev,
+    {
+      id: animationId,
+      x: x - 20, // Center the animation (assuming "+🐳💕" is ~40px wide)
+      y: y - 10, // Start slightly above the element
+      timestamp: now
+    }
+  ])
+
+  // Remove animation after it completes
+  setTimeout(() => {
+    set(floatingAnimationsAtom, (prev) => prev.filter((anim) => anim.id !== animationId))
+  }, 1000) // Match animation duration
+})

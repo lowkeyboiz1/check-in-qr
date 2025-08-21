@@ -8,6 +8,7 @@ import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { GuestFilterModal } from '@/components/guest-filter-modal'
 import { AddGuestModal } from '@/components/add-guest-modal'
+import { FloatingAnimation } from '@/components/floating-animation'
 import {
   guestsAtom,
   checkedInCountAtom,
@@ -19,7 +20,8 @@ import {
   Guest,
   addGuestAtom,
   newlyAddedGuestAtom,
-  showNewGuestAddedModalAtom
+  showNewGuestAddedModalAtom,
+  triggerFloatingAnimationAtom
 } from '@/store/atoms'
 import { User, Mail, Phone, UserCheck, UserX, Search, Plus, SlidersHorizontal, X, ArrowUpDown } from 'lucide-react'
 import { ScrollArea } from '@/components/ui/scroll-area'
@@ -138,6 +140,7 @@ function NewGuestAddedModal({
   const buttonRef = useRef<HTMLButtonElement | null>(null)
   const [isCheckingIn, setIsCheckingIn] = useState(false)
   const [allGuests] = useAtom(guestsAtom)
+  const triggerAnimation = useSetAtom(triggerFloatingAnimationAtom)
 
   if (!guest) return null
 
@@ -146,6 +149,13 @@ function NewGuestAddedModal({
 
   const handleToggleCheckIn = () => {
     setIsCheckingIn(true)
+
+    // Trigger animation if checking in
+    if (!currentGuest.isCheckedIn && buttonRef.current) {
+      const rect = buttonRef.current.getBoundingClientRect()
+      triggerAnimation(rect.left + rect.width / 2, rect.top)
+    }
+
     setTimeout(() => {
       parentHandleToggleCheckIn(guest.id)
       setIsCheckingIn(false)
@@ -262,6 +272,7 @@ export function GuestList() {
   const setShowAddModal = useSetAtom(showAddGuestModalAtom)
   const updateFilters = useSetAtom(updateGuestFiltersAtom)
   const addGuest = useSetAtom(addGuestAtom)
+  const triggerAnimation = useSetAtom(triggerFloatingAnimationAtom)
 
   // Handler for adding guests in mock mode
   const handleAddGuest = (guestData: Omit<Guest, 'id' | 'createdAt' | 'isCheckedIn'>) => {
@@ -284,7 +295,6 @@ export function GuestList() {
   const [showNewGuestAddedModal, setShowNewGuestAddedModal] = useAtom(showNewGuestAddedModalAtom)
   const [showFilterModal, setShowFilterModal] = useState(false)
   const [mockGuests, setMockGuests] = useState<Guest[]>(MOCK_GUESTS)
-  const [floatingAnimations, setFloatingAnimations] = useState<Array<{ id: string; x: number; y: number; timestamp: number }>>([])
   const buttonRefs = useRef<Record<string, HTMLButtonElement | null>>({})
   const lastAnimationRef = useRef<Record<string, number>>({})
 
@@ -347,25 +357,12 @@ export function GuestList() {
     if (!buttonElement) return
 
     const rect = buttonElement.getBoundingClientRect()
-    const animationId = `${guestId}-${now}`
 
     // Update last animation timestamp
     lastAnimationRef.current[guestId] = now
 
-    setFloatingAnimations((prev) => [
-      ...prev,
-      {
-        id: animationId,
-        x: rect.left + rect.width / 2 - 20, // Center the animation on the button (assuming "+🐳" is ~40px wide)
-        y: rect.top - 10, // Start slightly above the button
-        timestamp: now
-      }
-    ])
-
-    // Remove animation after it completes
-    setTimeout(() => {
-      setFloatingAnimations((prev) => prev.filter((anim) => anim.id !== animationId))
-    }, 1000) // Match animation duration
+    // Use the new animation trigger atom
+    triggerAnimation(rect.left + rect.width / 2, rect.top)
   }
 
   const handleToggleCheckIn = (guestId: string) => {
@@ -376,7 +373,7 @@ export function GuestList() {
             const isCheckedIn = !guest.isCheckedIn
             // Trigger animation only when checking in
             if (isCheckedIn) {
-              triggerFloatingAnimation(guestId, true)
+              !showAddGuestModalAtom && triggerFloatingAnimation(guestId, true)
             }
             return {
               ...guest,
@@ -390,7 +387,7 @@ export function GuestList() {
     } else {
       const guest = actualGuests.find((g) => g.id === guestId)
       if (guest && !guest.isCheckedIn) {
-        triggerFloatingAnimation(guestId, true)
+        !showAddGuestModalAtom && triggerFloatingAnimation(guestId, true)
       }
       toggleCheckIn(guestId)
     }
@@ -710,45 +707,6 @@ export function GuestList() {
           handleToggleCheckIn={handleToggleCheckIn}
         />
       </div>
-
-      {/* Floating Check-in Animations */}
-      <AnimatePresence>
-        {floatingAnimations.map((animation) => (
-          <motion.div
-            key={animation.id}
-            initial={{
-              opacity: 1,
-              y: 0,
-              x: 0,
-              scale: 1
-            }}
-            animate={{
-              opacity: 0,
-              y: -40,
-              scale: 1.2
-            }}
-            exit={{ opacity: 0 }}
-            transition={{
-              duration: 1,
-              ease: 'easeOut',
-              opacity: { delay: 0.6, duration: 0.4 }
-            }}
-            style={{
-              position: 'fixed',
-              left: animation.x,
-              top: animation.y,
-              pointerEvents: 'none',
-              zIndex: 1000,
-              fontSize: '32px',
-              fontWeight: 'bold',
-              color: '#10b981',
-              textShadow: '0 1px 3px rgba(0,0,0,0.3)'
-            }}
-          >
-            + 🐳💕
-          </motion.div>
-        ))}
-      </AnimatePresence>
     </ScrollArea>
   )
 }
