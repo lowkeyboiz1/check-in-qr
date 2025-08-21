@@ -450,7 +450,8 @@ export function GuestList() {
                   animate={{ scale: 1 }}
                   className='inline-flex items-center gap-1 rounded-full border border-gray-200 bg-white px-2.5 py-1 text-xs font-medium text-gray-700 shadow-sm'
                 >
-                  <Search className='h-3 w-3' />"{filters.searchTerm}"
+                  <Search className='h-3 w-3' />
+                  <span className='text-xs'>{filters.searchTerm}</span>
                   <button onClick={() => updateFilters({ searchTerm: '' })} className='ml-1 rounded-full p-0.5 hover:bg-gray-100'>
                     <X className='h-2.5 w-2.5' />
                   </button>
