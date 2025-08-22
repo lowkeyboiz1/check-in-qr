@@ -54,7 +54,7 @@ export default function Home() {
       <GuestModal />
 
       {/* Demo QR Generator (for testing) */}
-      <DemoQRGenerator />
+      {/* <DemoQRGenerator /> */}
     </div>
   )
 }

@@ -4,7 +4,8 @@ import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { useAtom, useSetAtom } from 'jotai'
 import { guestsAtom, checkedInCountAtom } from '@/store/atoms'
-import { Trash2, Download, Info, Users } from 'lucide-react'
+import { Trash2, Download, Info, Users, Upload } from 'lucide-react'
+import Link from 'next/link'
 
 export function SettingsPage() {
   const [allGuests] = useAtom(guestsAtom)
@@ -111,6 +112,16 @@ export function SettingsPage() {
           </div>
 
           <div className='space-y-3'>
+            <Link href='/import-csv'>
+              <Button variant='outline' size='lg' className='touch-target h-12 w-full justify-start rounded-xl border-gray-200 transition-all duration-200 hover:bg-gray-50'>
+                <Upload className='mr-3 h-4 w-4' />
+                <div className='text-left'>
+                  <p className='font-medium'>Import CSV</p>
+                  <p className='text-xs text-gray-500'>Nhập danh sách khách từ file CSV</p>
+                </div>
+              </Button>
+            </Link>
+
             <Button
               onClick={handleExportData}
               variant='outline'

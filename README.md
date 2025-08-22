@@ -1,4 +1,50 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Check-in QR App
+
+Ứng dụng quản lý check-in với QR code sử dụng Next.js và MongoDB.
+
+## Tính năng
+
+- ✅ Quản lý danh sách khách
+- ✅ Check-in/Check-out bằng QR code
+- ✅ Tìm kiếm và lọc khách
+- ✅ Thống kê real-time
+- ✅ Giao diện mobile-friendly
+
+## Setup MongoDB
+
+1. Tạo file `.env.local` với nội dung:
+
+```env
+NEXT_PUBLIC_MONGODB_URI=mongodb+srv://<username>:<password>@<cluster>.mongodb.net/<database>?retryWrites=true&w=majority
+```
+
+Hoặc sử dụng MongoDB local:
+
+```env
+NEXT_PUBLIC_MONGODB_URI=mongodb://localhost:27017/checkin
+```
+
+2. Thay thế `<username>`, `<password>`, `<cluster>` và `<database>` bằng thông tin MongoDB của bạn.
+
+## API Endpoints
+
+### Guests Management
+
+- `GET /api/user` - Lấy danh sách guests
+- `GET /api/user?search=query` - Tìm kiếm guests
+- `GET /api/user?id=guestId` - Lấy guest theo ID
+- `POST /api/user` - Tạo guest mới
+- `PUT /api/user?id=guestId` - Cập nhật guest
+- `DELETE /api/user?id=guestId` - Xóa guest
+
+### Check-in/Check-out
+
+- `POST /api/checkin` - Check-in guest
+- `POST /api/checkout` - Check-out guest
+
+### Statistics
+
+- `GET /api/stats` - Lấy thống kê
 
 ## Getting Started
 
@@ -34,4 +80,5 @@ You can check out [the Next.js GitHub repository](https://github.com/vercel/next
 The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
 
 Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+
 # check-in-qr

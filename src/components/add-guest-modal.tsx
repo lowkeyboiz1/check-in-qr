@@ -1,6 +1,6 @@
 'use client'
 
-import { useAtom, useSetAtom } from 'jotai'
+import { useAtom } from 'jotai'
 import { motion } from 'framer-motion'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
@@ -8,16 +8,18 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
-import { showAddGuestModalAtom, addGuestAtom, isLoadingAtom, showNewGuestAddedModalAtom, Guest } from '@/store/atoms'
+import { showAddGuestModalAtom, showNewGuestAddedModalAtom } from '@/store/atoms'
 import { guestFormSchema, type GuestFormData } from '@/lib/validations'
-import { User, Mail, Phone, Plus, X } from 'lucide-react'
+import { User, Mail, Phone, Plus, X, CheckCircle, AlertCircle } from 'lucide-react'
 import { FloatingAnimation } from '@/components/floating-animation'
+import { useAddGuest } from '@/hooks/useGuests'
+import { CreateGuestData } from '@/lib/models/Guest'
+import { useEffect } from 'react'
 
-export function AddGuestModal({ onAddGuest }: { onAddGuest?: (guest: Omit<Guest, 'id' | 'createdAt' | 'isCheckedIn'>) => void }) {
+export function AddGuestModal({ onAddGuest }: { onAddGuest?: (guest: CreateGuestData) => void }) {
   const [showModal, setShowModal] = useAtom(showAddGuestModalAtom)
-  const [isLoading] = useAtom(isLoadingAtom)
-  const addGuest = useSetAtom(addGuestAtom)
-  const [showNewGuestAddedModal] = useAtom(showNewGuestAddedModalAtom)
+  const [, setShowNewGuestAddedModal] = useAtom(showNewGuestAddedModalAtom)
+  const addGuestMutation = useAddGuest()
   const {
     register,
     handleSubmit,
@@ -33,24 +35,43 @@ export function AddGuestModal({ onAddGuest }: { onAddGuest?: (guest: Omit<Guest,
     }
   })
 
-  const onSubmit = (data: GuestFormData) => {
-    const guestData = {
+  const onSubmit = async (data: GuestFormData) => {
+    const guestData: CreateGuestData = {
       name: data.name.trim(),
       email: data.email.trim().toLowerCase(),
       phone: data.phone.trim()
     }
 
-    // Use custom callback if provided (for mock mode), otherwise use atom
+    // Use custom callback if provided (for mock mode)
     if (onAddGuest) {
       onAddGuest(guestData)
-    } else {
-      addGuest(guestData)
+      reset()
+      setShowModal(false)
+      return
     }
 
-    // Reset form and close modal
-    reset()
-    setShowModal(false)
+    // Use React Query mutation
+    try {
+      await addGuestMutation.mutateAsync(guestData)
+
+      // Show success notification
+      setShowNewGuestAddedModal(true)
+
+      // Reset form and close modal
+      reset()
+      setShowModal(false)
+    } catch (error) {
+      // Error handling is managed by React Query
+      console.error('Failed to add guest:', error)
+    }
   }
+
+  // Show success notification when guest is added successfully
+  useEffect(() => {
+    if (addGuestMutation.isSuccess) {
+      setShowNewGuestAddedModal(true)
+    }
+  }, [addGuestMutation.isSuccess, setShowNewGuestAddedModal])
 
   const handleClose = () => {
     reset()
@@ -79,17 +100,42 @@ export function AddGuestModal({ onAddGuest }: { onAddGuest?: (guest: Omit<Guest,
               {/* Phone Field */}
               <Input {...register('phone')} type='tel' label='Số điện thoại' icon={<Phone className='h-4 w-4' />} placeholder='Nhập số điện thoại...' error={errors.phone} required />
 
+              {/* Error Message */}
+              {addGuestMutation.isError && (
+                <div className='flex items-center gap-2 rounded-md bg-red-50 p-3 text-red-700'>
+                  <AlertCircle className='h-4 w-4 flex-shrink-0' />
+                  <span className='text-sm'>{addGuestMutation.error instanceof Error ? addGuestMutation.error.message : 'Đã có lỗi xảy ra khi thêm khách mời'}</span>
+                </div>
+              )}
+
+              {/* Success Message */}
+              {addGuestMutation.isSuccess && (
+                <div className='flex items-center gap-2 rounded-md bg-green-50 p-3 text-green-700'>
+                  <CheckCircle className='h-4 w-4 flex-shrink-0' />
+                  <span className='text-sm'>Thêm khách mời thành công!</span>
+                </div>
+              )}
+
               {/* Action Buttons */}
               <div className='flex gap-2 border-t pt-4'>
-                <Button type='button' onClick={handleClose} variant='outline' className='flex-1' disabled={isLoading}>
+                <Button type='button' onClick={handleClose} variant='outline' className='flex-1' disabled={addGuestMutation.isPending}>
                   <X className='mr-2 h-4 w-4' />
                   Hủy
                 </Button>
                 {/* Add Only Button */}
                 <motion.div whileTap={{ scale: 0.98 }} className='flex-1'>
-                  <Button type='submit' variant='outline' className='w-full border-blue-600 text-blue-600 hover:bg-blue-50' disabled={isLoading || !isValid}>
-                    <Plus className='mr-2 h-4 w-4' />
-                    {isLoading ? 'Đang thêm...' : 'Thêm khách'}
+                  <Button type='submit' variant='outline' className='w-full border-blue-600 text-blue-600 hover:bg-blue-50' disabled={addGuestMutation.isPending || !isValid}>
+                    {addGuestMutation.isPending ? (
+                      <>
+                        <div className='mr-2 h-4 w-4 animate-spin rounded-full border-2 border-blue-600 border-t-transparent' />
+                        Đang thêm...
+                      </>
+                    ) : (
+                      <>
+                        <Plus className='mr-2 h-4 w-4' />
+                        Thêm khách
+                      </>
+                    )}
                   </Button>
                 </motion.div>
               </div>

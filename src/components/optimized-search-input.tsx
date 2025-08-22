@@ -1,12 +1,8 @@
 'use client'
 
-import { useState, useCallback, useMemo } from 'react'
-import { useForm, Controller } from 'react-hook-form'
-import { zodResolver } from '@hookform/resolvers/zod'
+import { useState, useCallback, useMemo, memo } from 'react'
 import { Search, X } from 'lucide-react'
-import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
-import { searchFilterSchema, type SearchFilterData } from '@/lib/validations'
 import { useDebounce } from '@/hooks/useDebounce'
 
 interface OptimizedSearchInputProps {
@@ -16,15 +12,8 @@ interface OptimizedSearchInputProps {
   debounceMs?: number
 }
 
-export function OptimizedSearchInput({ onSearch, placeholder = 'Tìm kiếm...', className, debounceMs = 300 }: OptimizedSearchInputProps) {
-  const { control, watch, setValue, handleSubmit } = useForm<SearchFilterData>({
-    resolver: zodResolver(searchFilterSchema),
-    defaultValues: {
-      searchQuery: ''
-    }
-  })
-
-  const searchQuery = watch('searchQuery')
+export const OptimizedSearchInput = memo(function OptimizedSearchInput({ onSearch, placeholder = 'Tìm kiếm...', className, debounceMs = 300 }: OptimizedSearchInputProps) {
+  const [searchQuery, setSearchQuery] = useState('')
   const debouncedSearchQuery = useDebounce(searchQuery, debounceMs)
 
   // Trigger search when debounced value changes
@@ -32,32 +21,32 @@ export function OptimizedSearchInput({ onSearch, placeholder = 'Tìm kiếm...',
     onSearch(debouncedSearchQuery)
   }, [debouncedSearchQuery, onSearch])
 
-  const handleClear = useCallback(() => {
-    setValue('searchQuery', '')
-  }, [setValue])
+  const handleInputChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    setSearchQuery(e.target.value)
+  }, [])
 
-  const onSubmit = useCallback(
-    (data: SearchFilterData) => {
-      onSearch(data.searchQuery)
+  const handleClear = useCallback(() => {
+    setSearchQuery('')
+  }, [])
+
+  const handleSubmit = useCallback(
+    (e: React.FormEvent) => {
+      e.preventDefault()
+      onSearch(searchQuery)
     },
-    [onSearch]
+    [onSearch, searchQuery]
   )
 
   return (
-    <div className={`relative ${className}`}>
-      <form onSubmit={handleSubmit(onSubmit)} className='relative'>
+    <div className={`relative ${className || ''}`}>
+      <form onSubmit={handleSubmit} className='relative'>
         <Search className='pointer-events-none absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 transform text-gray-400' />
-        <Controller
-          name='searchQuery'
-          control={control}
-          render={({ field, fieldState }) => (
-            <input
-              {...field}
-              type='text'
-              placeholder={placeholder}
-              className='w-full rounded-lg border border-gray-200 bg-white py-2 pr-10 pl-10 text-sm focus:border-transparent focus:ring-2 focus:ring-blue-500'
-            />
-          )}
+        <input
+          type='text'
+          value={searchQuery}
+          onChange={handleInputChange}
+          placeholder={placeholder}
+          className='h-11 w-full rounded-xl border border-gray-200 bg-white pr-4 pl-10 text-sm shadow-sm transition-all duration-200 placeholder:text-gray-400 focus:border-blue-500 focus:shadow-md focus:ring-2 focus:ring-blue-500/10'
         />
         {searchQuery && (
           <Button type='button' variant='ghost' size='sm' onClick={handleClear} className='absolute top-1/2 right-1 h-6 w-6 -translate-y-1/2 transform rounded-full p-0 hover:bg-gray-100'>
@@ -67,4 +56,4 @@ export function OptimizedSearchInput({ onSearch, placeholder = 'Tìm kiếm...',
       </form>
     </div>
   )
-}
+})

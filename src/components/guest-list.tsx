@@ -1,6 +1,7 @@
 'use client'
 
-import { useState, useRef } from 'react'
+import { useState, useRef, useMemo, useCallback, memo, useContext, useEffect } from 'react'
+import React from 'react'
 
 import { useAtom, useSetAtom } from 'jotai'
 import { motion, AnimatePresence } from 'framer-motion'
@@ -10,144 +11,194 @@ import { GuestFilterModal } from '@/components/guest-filter-modal'
 import { AddGuestModal } from '@/components/add-guest-modal'
 import { FloatingAnimation } from '@/components/floating-animation'
 import {
-  guestsAtom,
-  checkedInCountAtom,
   toggleGuestCheckInAtom,
   guestFiltersAtom,
   showAddGuestModalAtom,
   updateGuestFiltersAtom,
-  filteredGuestsAtom,
-  Guest,
-  addGuestAtom,
   newlyAddedGuestAtom,
   showNewGuestAddedModalAtom,
-  triggerFloatingAnimationAtom
+  triggerFloatingAnimationAtom,
+  Guest as AtomGuest
 } from '@/store/atoms'
-import { User, Mail, Phone, UserCheck, UserX, Search, Plus, SlidersHorizontal, X, ArrowUpDown } from 'lucide-react'
+import { User, Mail, Phone, UserCheck, UserX, Search, Plus, SlidersHorizontal, X, ArrowUpDown, RefreshCw } from 'lucide-react'
 import { ScrollArea } from '@/components/ui/scroll-area'
+import { useGuests, useToggleCheckIn } from '@/hooks/useGuests'
+import { Guest } from '@/lib/models/Guest'
+import { FixedSizeList as List } from 'react-window'
+import { OptimizedSearchInput } from '@/components/optimized-search-input'
 
-const MOCK_DATA_MODE = true
-
-const MOCK_GUESTS: Guest[] = [
-  {
-    id: '1',
-    name: 'Nguyễn Văn An',
-    email: 'an.nguyen@example.com',
-    phone: '0901234567',
-    isCheckedIn: true,
-    createdAt: '2024-01-15T08:30:00.000Z',
-    checkedInAt: '2024-01-15T09:15:00.000Z'
-  },
-  {
-    id: '2',
-    name: 'Trần Thị Bình',
-    email: 'binh.tran@example.com',
-    phone: '0902345678',
-    isCheckedIn: false,
-    createdAt: '2024-01-15T09:00:00.000Z',
-    checkedInAt: undefined
-  },
-  {
-    id: '3',
-    name: 'Lê Minh Cường',
-    email: 'cuong.le@example.com',
-    phone: '0903456789',
-    isCheckedIn: true,
-    createdAt: '2024-01-15T09:30:00.000Z',
-    checkedInAt: '2024-01-15T10:00:00.000Z'
-  },
-  {
-    id: '4',
-    name: 'Phạm Thị Dung',
-    email: 'dung.pham@example.com',
-    phone: '0904567890',
-    isCheckedIn: false,
-    createdAt: '2024-01-15T10:00:00.000Z',
-    checkedInAt: undefined
-  },
-  {
-    id: '5',
-    name: 'Hoàng Văn Em',
-    email: 'em.hoang@example.com',
-    phone: '0905678901',
-    isCheckedIn: true,
-    createdAt: '2024-01-15T10:30:00.000Z',
-    checkedInAt: '2024-01-15T11:00:00.000Z'
-  },
-  {
-    id: '6',
-    name: 'Đỗ Thị Phượng',
-    email: 'phuong.do@example.com',
-    phone: '0906789012',
-    isCheckedIn: false,
-    createdAt: '2024-01-15T11:00:00.000Z',
-    checkedInAt: undefined
-  },
-  {
-    id: '7',
-    name: 'Vũ Minh Giang',
-    email: 'giang.vu@example.com',
-    phone: '0907890123',
-    isCheckedIn: true,
-    createdAt: '2024-01-15T11:30:00.000Z',
-    checkedInAt: '2024-01-15T12:00:00.000Z'
-  },
-  {
-    id: '8',
-    name: 'Bùi Thị Hoa',
-    email: 'hoa.bui@example.com',
-    phone: '0908901234',
-    isCheckedIn: false,
-    createdAt: '2024-01-15T12:00:00.000Z',
-    checkedInAt: undefined
-  },
-  {
-    id: '9',
-    name: 'Ngô Văn Inh',
-    email: 'inh.ngo@example.com',
-    phone: '0909012345',
-    isCheckedIn: true,
-    createdAt: '2024-01-15T12:30:00.000Z',
-    checkedInAt: '2024-01-15T13:00:00.000Z'
-  },
-  {
-    id: '10',
-    name: 'Đinh Thị Kim',
-    email: 'kim.dinh@example.com',
-    phone: '0910123456',
-    isCheckedIn: false,
-    createdAt: '2024-01-15T13:00:00.000Z',
-    checkedInAt: undefined
+// Helper to convert between Guest types
+function convertGuestTypes(guest: AtomGuest | Guest): Guest {
+  return {
+    id: guest.id,
+    name: guest.name,
+    email: guest.email,
+    phone: guest.phone,
+    isCheckedIn: guest.isCheckedIn,
+    createdAt: typeof guest.createdAt === 'string' ? new Date(guest.createdAt) : guest.createdAt,
+    checkedInAt: guest.checkedInAt ? (typeof guest.checkedInAt === 'string' ? new Date(guest.checkedInAt) : guest.checkedInAt) : undefined
   }
-]
+}
 
-// New Guest Added Modal Component
-function NewGuestAddedModal({
+// Virtual List Row Component for large guest lists
+const VirtualGuestRow = memo(function VirtualGuestRow({
+  index,
+  style,
+  data
+}: {
+  index: number
+  style: React.CSSProperties
+  data: { guests: Guest[]; handleToggleCheckIn: (id: string) => Promise<void>; buttonRefs: React.MutableRefObject<Record<string, HTMLButtonElement | null>> }
+}) {
+  const guest = data.guests[index]
+  const { handleToggleCheckIn, buttonRefs } = data
+  const [isLoading, setIsLoading] = useState(false)
+
+  const handleCardCheckIn = useCallback(
+    async (e: React.MouseEvent) => {
+      e.stopPropagation()
+      if (isLoading) return
+
+      setIsLoading(true)
+      try {
+        await handleToggleCheckIn(guest.id)
+      } finally {
+        setIsLoading(false)
+      }
+    },
+    [guest.id, handleToggleCheckIn, isLoading]
+  )
+
+  return (
+    <div style={style} className='px-4 pb-4'>
+      <Card className='relative flex flex-col overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm transition-all duration-200 hover:shadow-md'>
+        <div className='p-5'>
+          <div className='mb-4 flex items-center justify-between'>
+            <div
+              className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-sm font-medium ${
+                guest.isCheckedIn ? 'border border-emerald-200 bg-emerald-100 text-emerald-700' : 'border border-amber-200 bg-amber-100 text-amber-700'
+              }`}
+            >
+              <div className={`h-2 w-2 rounded-full ${guest.isCheckedIn ? 'bg-emerald-500' : 'bg-amber-500'}`} />
+              {guest.isCheckedIn ? 'Đã check-in' : 'Chưa đến'}
+            </div>
+            <Button
+              ref={(el) => {
+                buttonRefs.current[guest.id] = el
+              }}
+              onClick={handleCardCheckIn}
+              disabled={isLoading}
+              size='sm'
+              className={`touch-target h-10 rounded-xl px-4 font-medium shadow-sm transition-all duration-200 disabled:cursor-not-allowed disabled:opacity-70 ${
+                guest.isCheckedIn ? 'bg-amber-500 text-white shadow-amber-200 hover:bg-amber-600' : 'bg-emerald-500 text-white shadow-emerald-200 hover:bg-emerald-600'
+              }`}
+            >
+              {isLoading ? (
+                <div className='flex items-center'>
+                  <div className='mr-2 h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent' />
+                  Đang...
+                </div>
+              ) : guest.isCheckedIn ? (
+                <>
+                  <UserX className='mr-1.5 h-4 w-4' />
+                  Check-out
+                </>
+              ) : (
+                <>
+                  <UserCheck className='mr-1.5 h-4 w-4' />
+                  Check-in
+                </>
+              )}
+            </Button>
+          </div>
+          <div className='space-y-3'>
+            <h3 className='text-lg leading-snug font-semibold text-gray-900'>{guest.name || ''}</h3>
+            <div className='space-y-2 text-sm text-gray-600'>
+              <div className='flex items-center gap-2'>
+                <Mail className='h-4 w-4 flex-shrink-0 text-gray-400' />
+                <span className='truncate font-medium'>{guest.email || ''}</span>
+              </div>
+              <div className='flex items-center gap-2'>
+                <Phone className='h-4 w-4 flex-shrink-0 text-gray-400' />
+                <span className='font-medium'>{guest.phone || ''}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div className={`absolute top-0 right-0 left-0 h-1.5 ${guest.isCheckedIn ? 'bg-gradient-to-r from-emerald-400 to-emerald-500' : 'bg-gradient-to-r from-amber-400 to-orange-500'}`} />
+      </Card>
+    </div>
+  )
+})
+
+// Virtualized Guest List Component
+const VirtualizedGuestList = memo(function VirtualizedGuestList({ guests }: { guests: Guest[] }) {
+  const context = useContext(GuestListContext)
+  const { handleToggleCheckIn } = context
+  const buttonRefs = useRef<Record<string, HTMLButtonElement | null>>({})
+  const [windowHeight, setWindowHeight] = useState(600)
+
+  // Handle window resize for dynamic height
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      setWindowHeight(window.innerHeight)
+
+      const handleResize = () => {
+        setWindowHeight(window.innerHeight)
+      }
+
+      window.addEventListener('resize', handleResize)
+      return () => window.removeEventListener('resize', handleResize)
+    }
+  }, [])
+
+  const itemData = useMemo(
+    () => ({
+      guests,
+      handleToggleCheckIn,
+      buttonRefs
+    }),
+    [guests, handleToggleCheckIn]
+  )
+
+  return (
+    <List
+      height={Math.min(600, windowHeight - 200)} // Dynamic height based on screen
+      width='100%' // Required width property
+      itemCount={guests.length}
+      itemSize={180} // Increased height per guest card to prevent overlapping
+      itemData={itemData}
+      overscanCount={3} // Reduced overscan for better performance
+    >
+      {VirtualGuestRow}
+    </List>
+  )
+})
+
+// New Guest Added Modal Component - Memoized for performance
+const NewGuestAddedModal = memo(function NewGuestAddedModal({
   guest,
   isOpen,
   onClose,
-  mockGuests,
-  setMockGuests,
   handleToggleCheckIn: parentHandleToggleCheckIn
 }: {
-  guest: Guest | null
+  guest: AtomGuest | null
   isOpen: boolean
   onClose: () => void
-  mockGuests: Guest[]
-  setMockGuests: React.Dispatch<React.SetStateAction<Guest[]>>
-  handleToggleCheckIn: (guestId: string) => void
+  handleToggleCheckIn: (guestId: string) => Promise<void>
 }) {
   const buttonRef = useRef<HTMLButtonElement | null>(null)
   const [isCheckingIn, setIsCheckingIn] = useState(false)
-  const [allGuests] = useAtom(guestsAtom)
+  const { data: allGuests = [] } = useGuests()
   const triggerAnimation = useSetAtom(triggerFloatingAnimationAtom)
 
   if (!guest) return null
 
-  // Get the current state of the guest (either from atoms or mock data)
-  const currentGuest = MOCK_DATA_MODE ? mockGuests.find((g) => g.id === guest.id) || guest : allGuests.find((g) => g.id === guest.id) || guest
+  // Get the current state of the guest from React Query data or use the atom guest
+  const reactQueryGuest = allGuests.find((g: Guest) => g.id === guest.id)
+  const currentGuest = reactQueryGuest || convertGuestTypes(guest)
 
-  const handleToggleCheckIn = () => {
+  const handleToggleCheckIn = useCallback(async () => {
     setIsCheckingIn(true)
 
     // Trigger animation if checking in
@@ -156,11 +207,14 @@ function NewGuestAddedModal({
       triggerAnimation(rect.left + rect.width / 2, rect.top)
     }
 
-    setTimeout(() => {
-      parentHandleToggleCheckIn(guest.id)
+    try {
+      await parentHandleToggleCheckIn(guest.id)
+    } catch (error) {
+      console.error('Failed to toggle check-in in modal:', error)
+    } finally {
       setIsCheckingIn(false)
-    }, 300)
-  }
+    }
+  }, [currentGuest.isCheckedIn, guest.id, parentHandleToggleCheckIn, triggerAnimation])
 
   return (
     <AnimatePresence>
@@ -185,10 +239,10 @@ function NewGuestAddedModal({
                 </div>
               </div>
 
-              {/* Guest Card Content */}
-              <div className='p-4'>
+              {/* Guest Card Content - Improved spacing */}
+              <div className='p-5'>
                 {/* Header Row - Status and Action */}
-                <div className='mb-3 flex items-center justify-between'>
+                <div className='mb-4 flex items-center justify-between'>
                   {/* Status Badge */}
                   <div
                     className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-sm font-medium ${
@@ -199,41 +253,42 @@ function NewGuestAddedModal({
                     {currentGuest.isCheckedIn ? 'Đã check-in' : 'Chưa đến'}
                   </div>
 
-                  {/* Check-in Button */}
-                  <motion.div whileTap={{ scale: 0.95 }}>
-                    <Button
-                      ref={buttonRef}
-                      onClick={handleToggleCheckIn}
-                      disabled={isCheckingIn}
-                      size='sm'
-                      className={`touch-target h-9 rounded-xl px-4 font-medium shadow-sm transition-all duration-200 ${
-                        currentGuest.isCheckedIn ? 'bg-amber-500 text-white shadow-amber-200 hover:bg-amber-600' : 'bg-emerald-500 text-white shadow-emerald-200 hover:bg-emerald-600'
-                      }`}
-                    >
-                      {isCheckingIn ? (
-                        <div className='h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent' />
-                      ) : currentGuest.isCheckedIn ? (
-                        <>
-                          <UserX className='mr-1.5 h-4 w-4' />
-                          Check-out
-                        </>
-                      ) : (
-                        <>
-                          <UserCheck className='mr-1.5 h-4 w-4' />
-                          Check-in
-                        </>
-                      )}
-                    </Button>
-                  </motion.div>
+                  {/* Check-in Button with Loading */}
+                  <Button
+                    ref={buttonRef}
+                    onClick={handleToggleCheckIn}
+                    disabled={isCheckingIn}
+                    size='sm'
+                    className={`touch-target h-10 rounded-xl px-4 font-medium shadow-sm transition-all duration-200 active:scale-95 disabled:cursor-not-allowed disabled:opacity-70 ${
+                      currentGuest.isCheckedIn ? 'bg-amber-500 text-white shadow-amber-200 hover:bg-amber-600' : 'bg-emerald-500 text-white shadow-emerald-200 hover:bg-emerald-600'
+                    }`}
+                  >
+                    {isCheckingIn ? (
+                      <div className='flex items-center'>
+                        <div className='mr-2 h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent' />
+                        Đang...
+                      </div>
+                    ) : currentGuest.isCheckedIn ? (
+                      <>
+                        <UserX className='mr-1.5 h-4 w-4' />
+                        Check-out
+                      </>
+                    ) : (
+                      <>
+                        <UserCheck className='mr-1.5 h-4 w-4' />
+                        Check-in
+                      </>
+                    )}
+                  </Button>
                 </div>
 
-                {/* Guest Info */}
-                <div className='space-y-2'>
+                {/* Guest Info - Better spacing */}
+                <div className='space-y-3'>
                   {/* Name */}
-                  <h3 className='text-base leading-snug font-semibold text-gray-900'>{currentGuest.name}</h3>
+                  <h3 className='text-lg leading-snug font-semibold text-gray-900'>{currentGuest.name}</h3>
 
                   {/* Contact Details */}
-                  <div className='space-y-1.5 text-sm text-gray-600'>
+                  <div className='space-y-2 text-sm text-gray-600'>
                     <div className='flex items-center gap-2'>
                       <Mail className='h-4 w-4 flex-shrink-0 text-gray-400' />
                       <span className='truncate font-medium'>{currentGuest.email}</span>
@@ -261,248 +316,264 @@ function NewGuestAddedModal({
       )}
     </AnimatePresence>
   )
-}
+})
+
+// Context for sharing handlers with virtual list
+const GuestListContext = React.createContext<{
+  handleToggleCheckIn: (guestId: string) => Promise<void>
+}>({
+  handleToggleCheckIn: async () => {
+    // Default implementation
+  }
+})
 
 export function GuestList() {
-  const [allGuests] = useAtom(guestsAtom)
-  const [checkedInCount] = useAtom(checkedInCountAtom)
+  // React Query
+  const { data: allGuests = [], isLoading, isError, error, refetch } = useGuests()
+  const toggleCheckInMutation = useToggleCheckIn()
+
+  // Jotai atoms
   const [filters] = useAtom(guestFiltersAtom)
-  const [filteredGuests] = useAtom(filteredGuestsAtom)
-  const toggleCheckIn = useSetAtom(toggleGuestCheckInAtom)
   const setShowAddModal = useSetAtom(showAddGuestModalAtom)
   const updateFilters = useSetAtom(updateGuestFiltersAtom)
-  const addGuest = useSetAtom(addGuestAtom)
   const triggerAnimation = useSetAtom(triggerFloatingAnimationAtom)
-
-  // Handler for adding guests in mock mode
-  const handleAddGuest = (guestData: Omit<Guest, 'id' | 'createdAt' | 'isCheckedIn'>) => {
-    if (MOCK_DATA_MODE) {
-      const newGuest: Guest = {
-        ...guestData,
-        id: Date.now().toString() + Math.random().toString(36).substr(2, 9),
-        createdAt: new Date().toISOString(),
-        isCheckedIn: false
-      }
-      setMockGuests((prev) => [...prev, newGuest])
-      setNewlyAddedGuest(newGuest)
-      setShowNewGuestAddedModal(true)
-    } else {
-      addGuest(guestData)
-    }
-  }
 
   const [newlyAddedGuest, setNewlyAddedGuest] = useAtom(newlyAddedGuestAtom)
   const [showNewGuestAddedModal, setShowNewGuestAddedModal] = useAtom(showNewGuestAddedModalAtom)
   const [showFilterModal, setShowFilterModal] = useState(false)
-  const [mockGuests, setMockGuests] = useState<Guest[]>(MOCK_GUESTS)
   const buttonRefs = useRef<Record<string, HTMLButtonElement | null>>({})
   const lastAnimationRef = useRef<Record<string, number>>({})
 
-  // Use mock data if MOCK_DATA_MODE is true, otherwise use atom data
-  const actualGuests = MOCK_DATA_MODE ? mockGuests : allGuests
+  // Calculate filtered guests and stats using React Query data
+  const { filteredGuests, checkedInCount } = useMemo(() => {
+    if (!allGuests) return { filteredGuests: [], checkedInCount: 0 }
 
-  // Frontend filtering for mock data or use atom filtered data for real data
-  const actualFilteredGuests = MOCK_DATA_MODE
-    ? mockGuests
-        .filter((guest) => {
-          // Search filter
-          const searchTerm = filters.searchTerm.toLowerCase()
-          const matchesSearch = !searchTerm || guest.name.toLowerCase().includes(searchTerm) || guest.email.toLowerCase().includes(searchTerm) || guest.phone.includes(searchTerm)
+    let filtered = [...allGuests]
 
-          // Status filter
-          let matchesStatus = true
-          if (filters.status === 'checked-in') {
-            matchesStatus = guest.isCheckedIn
-          } else if (filters.status === 'not-checked-in') {
-            matchesStatus = !guest.isCheckedIn
-          }
+    // Filter by status
+    if (filters.status === 'checked-in') {
+      filtered = filtered.filter((guest) => guest.isCheckedIn)
+    } else if (filters.status === 'not-checked-in') {
+      filtered = filtered.filter((guest) => !guest.isCheckedIn)
+    }
 
-          return matchesSearch && matchesStatus
-        })
-        .sort((a, b) => {
-          let compareValue = 0
+    // Filter by search term
+    if (filters.searchTerm) {
+      const searchLower = filters.searchTerm.toLowerCase()
+      filtered = filtered.filter((guest) => guest.name?.toLowerCase().includes(searchLower) || guest.email?.toLowerCase().includes(searchLower) || guest.phone?.includes(searchLower))
+    }
 
-          switch (filters.sortField) {
-            case 'name':
-              compareValue = a.name.localeCompare(b.name, 'vi')
-              break
-            case 'createdAt':
-              compareValue = new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
-              break
-            case 'checkedInAt':
-              const aTime = a.checkedInAt || ''
-              const bTime = b.checkedInAt || ''
-              compareValue = aTime.localeCompare(bTime)
-              break
-            case 'status':
-              compareValue = Number(b.isCheckedIn) - Number(a.isCheckedIn)
-              break
-          }
+    // Sort guests
+    filtered.sort((a, b) => {
+      let comparison = 0
 
-          return filters.sortOrder === 'asc' ? compareValue : -compareValue
-        })
-    : filteredGuests
+      switch (filters.sortField) {
+        case 'name':
+          comparison = a.name?.localeCompare(b.name || '', 'vi') || 0
+          break
+        case 'checkedInAt':
+          const aTime = a.checkedInAt?.toString() || ''
+          const bTime = b.checkedInAt?.toString() || ''
+          comparison = aTime.localeCompare(bTime)
+          break
+        case 'createdAt':
+          comparison = a.createdAt.toString().localeCompare(b.createdAt.toString())
+          break
+        case 'status':
+          comparison = Number(b.isCheckedIn) - Number(a.isCheckedIn)
+          break
+      }
 
-  const actualCheckedInCount = MOCK_DATA_MODE ? mockGuests.filter((guest) => guest.isCheckedIn).length : checkedInCount
+      return filters.sortOrder === 'desc' ? -comparison : comparison
+    })
 
-  const triggerFloatingAnimation = (guestId: string, isCheckingIn: boolean) => {
-    if (!isCheckingIn) return // Only animate when checking in, not checking out
+    const checkedIn = allGuests.filter((guest) => guest.isCheckedIn).length
 
-    // Prevent duplicate animations within 500ms
-    const now = Date.now()
-    const lastAnimation = lastAnimationRef.current[guestId] || 0
-    if (now - lastAnimation < 500) return
+    return { filteredGuests: filtered, checkedInCount: checkedIn }
+  }, [allGuests, filters])
 
-    const buttonElement = buttonRefs.current[guestId]
-    if (!buttonElement) return
+  // Use processed data
+  const actualGuests = allGuests
+  const actualFilteredGuests = filteredGuests
+  const actualCheckedInCount = checkedInCount
 
-    const rect = buttonElement.getBoundingClientRect()
+  const triggerFloatingAnimation = useCallback(
+    (guestId: string, isCheckingIn: boolean) => {
+      if (!isCheckingIn) return // Only animate when checking in, not checking out
 
-    // Update last animation timestamp
-    lastAnimationRef.current[guestId] = now
+      // Prevent duplicate animations within 500ms
+      const now = Date.now()
+      const lastAnimation = lastAnimationRef.current[guestId] || 0
+      if (now - lastAnimation < 500) return
 
-    // Use the new animation trigger atom
-    triggerAnimation(rect.left + rect.width / 2, rect.top)
-  }
+      const buttonElement = buttonRefs.current[guestId]
+      if (!buttonElement) return
 
-  const handleToggleCheckIn = (guestId: string) => {
-    if (MOCK_DATA_MODE) {
-      setMockGuests((prevGuests) =>
-        prevGuests.map((guest) => {
-          if (guest.id === guestId) {
-            const isCheckedIn = !guest.isCheckedIn
-            // Trigger animation only when checking in
-            if (isCheckedIn) {
-              !showAddGuestModalAtom && triggerFloatingAnimation(guestId, true)
-            }
-            return {
-              ...guest,
-              isCheckedIn,
-              checkedInAt: isCheckedIn ? new Date().toISOString() : undefined
-            }
-          }
-          return guest
-        })
-      )
-    } else {
+      const rect = buttonElement.getBoundingClientRect()
+
+      // Update last animation timestamp
+      lastAnimationRef.current[guestId] = now
+
+      // Use the new animation trigger atom
+      triggerAnimation(rect.left + rect.width / 2, rect.top)
+    },
+    [triggerAnimation]
+  )
+
+  const handleToggleCheckIn = useCallback(
+    async (guestId: string) => {
       const guest = actualGuests.find((g) => g.id === guestId)
       if (guest && !guest.isCheckedIn) {
-        !showAddGuestModalAtom && triggerFloatingAnimation(guestId, true)
+        triggerFloatingAnimation(guestId, true)
       }
-      toggleCheckIn(guestId)
-    }
-  }
 
-  const handleSearchChange = (value: string) => {
-    updateFilters({ searchTerm: value })
-  }
+      try {
+        await toggleCheckInMutation.mutateAsync(guestId)
+      } catch (error) {
+        console.error('Failed to toggle check-in:', error)
+        // Error is already handled by the mutation's onError
+      }
+    },
+    [actualGuests, triggerFloatingAnimation, toggleCheckInMutation]
+  )
 
-  const getActiveFiltersCount = () => {
+  const handleSearchChange = useCallback(
+    (value: string) => {
+      updateFilters({ searchTerm: value })
+    },
+    [updateFilters]
+  )
+
+  const getActiveFiltersCount = useCallback(() => {
     let count = 0
     if (filters.searchTerm) count++
     if (filters.status !== 'all') count++
     if (filters.sortField !== 'name' || filters.sortOrder !== 'asc') count++
     return count
-  }
+  }, [filters])
 
-  const clearFilters = () => {
+  const clearFilters = useCallback(() => {
     updateFilters({
       searchTerm: '',
       status: 'all',
       sortField: 'name',
       sortOrder: 'asc'
     })
-  }
+  }, [updateFilters])
 
-  const hasActiveFilters = getActiveFiltersCount() > 0
+  const hasActiveFilters = useMemo(() => getActiveFiltersCount() > 0, [getActiveFiltersCount])
 
-  const renderGuestCard = (guest: Guest, index: number) => {
+  // Memoized Guest Card Component for performance
+  const GuestCard = memo(function GuestCard({ guest, index }: { guest: Guest; index: number }) {
+    const [isLoading, setIsLoading] = useState(false)
+
+    const handleCardCheckIn = useCallback(
+      async (e: React.MouseEvent) => {
+        e.stopPropagation()
+        if (isLoading) return // Prevent spam clicking
+
+        setIsLoading(true)
+        try {
+          await handleToggleCheckIn(guest.id)
+        } finally {
+          setIsLoading(false)
+        }
+      },
+      [guest.id, isLoading]
+    )
+
     return (
-      <motion.div key={guest.id} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: index * 0.03 }} className='relative'>
-        <Card className='relative overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm transition-all duration-200 hover:shadow-md active:scale-[0.99]'>
-          {/* Mobile-Optimized Layout */}
-          <div className='p-4'>
-            {/* Header Row - Status and Action */}
-            <div className='mb-3 flex items-center justify-between'>
-              {/* Status Badge */}
-              <div
-                className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-sm font-medium ${
-                  guest.isCheckedIn ? 'border border-emerald-200 bg-emerald-100 text-emerald-700' : 'border border-amber-200 bg-amber-100 text-amber-700'
-                }`}
-              >
-                <div className={`h-2 w-2 rounded-full ${guest.isCheckedIn ? 'bg-emerald-500' : 'bg-amber-500'}`} />
-                {guest.isCheckedIn ? 'Đã check-in' : 'Chưa đến'}
-              </div>
-
-              {/* Mobile Check-in Button */}
-              <motion.div whileTap={{ scale: 0.95 }}>
-                <Button
-                  ref={(el) => {
-                    buttonRefs.current[guest.id] = el
-                  }}
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    handleToggleCheckIn(guest.id)
-                  }}
-                  size='sm'
-                  className={`touch-target h-9 rounded-xl px-4 font-medium shadow-sm transition-all duration-200 ${
-                    guest.isCheckedIn ? 'bg-amber-500 text-white shadow-amber-200 hover:bg-amber-600' : 'bg-emerald-500 text-white shadow-emerald-200 hover:bg-emerald-600'
-                  }`}
-                >
-                  {guest.isCheckedIn ? (
-                    <>
-                      <UserX className='mr-1.5 h-4 w-4' />
-                      Check-out
-                    </>
-                  ) : (
-                    <>
-                      <UserCheck className='mr-1.5 h-4 w-4' />
-                      Check-in
-                    </>
-                  )}
-                </Button>
-              </motion.div>
+      <Card className='relative overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm transition-all duration-200 hover:shadow-md'>
+        {/* Layout - More spacious padding */}
+        <div className='p-6'>
+          {/* Header Row - Status and Action - Better spacing */}
+          <div className='mb-4 flex items-center justify-between'>
+            {/* Status Badge */}
+            <div
+              className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-sm font-medium ${
+                guest.isCheckedIn ? 'border border-emerald-200 bg-emerald-100 text-emerald-700' : 'border border-amber-200 bg-amber-100 text-amber-700'
+              }`}
+            >
+              <div className={`h-2 w-2 rounded-full ${guest.isCheckedIn ? 'bg-emerald-500' : 'bg-amber-500'}`} />
+              {guest.isCheckedIn ? 'Đã check-in' : 'Chưa đến'}
             </div>
 
-            {/* Guest Info */}
-            <div className='space-y-2'>
-              {/* Name */}
-              <h3 className='text-base leading-snug font-semibold text-gray-900'>{guest.name}</h3>
+            {/* Check-in Button with Loading */}
+            <Button
+              ref={(el) => {
+                buttonRefs.current[guest.id] = el
+              }}
+              onClick={handleCardCheckIn}
+              disabled={isLoading}
+              size='sm'
+              className={`h-11 rounded-xl px-5 font-medium shadow-sm transition-all duration-200 disabled:cursor-not-allowed disabled:opacity-70 ${
+                guest.isCheckedIn ? 'bg-amber-500 text-white shadow-amber-200 hover:bg-amber-600' : 'bg-emerald-500 text-white shadow-emerald-200 hover:bg-emerald-600'
+              }`}
+            >
+              {isLoading ? (
+                <div className='flex items-center'>
+                  <div className='mr-2 h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent' />
+                  {guest.isCheckedIn ? 'Đang...' : 'Đang...'}
+                </div>
+              ) : guest.isCheckedIn ? (
+                <>
+                  <UserX className='mr-1.5 h-4 w-4' />
+                  Check-out
+                </>
+              ) : (
+                <>
+                  <UserCheck className='mr-1.5 h-4 w-4' />
+                  Check-in
+                </>
+              )}
+            </Button>
+          </div>
 
-              {/* Contact Details */}
-              <div className='space-y-1.5 text-sm text-gray-600'>
-                <div className='flex items-center gap-2'>
-                  <Mail className='h-4 w-4 flex-shrink-0 text-gray-400' />
-                  <span className='truncate font-medium'>{guest.email}</span>
-                </div>
-                <div className='flex items-center gap-2'>
-                  <Phone className='h-4 w-4 flex-shrink-0 text-gray-400' />
-                  <span className='font-medium'>{guest.phone}</span>
-                </div>
+          {/* Guest Info - Improved spacing */}
+          <div className='space-y-3'>
+            {/* Name */}
+            <h3 className='text-lg leading-snug font-semibold text-gray-900'>{guest.name || ''}</h3>
+
+            {/* Contact Details */}
+            <div className='space-y-2 text-sm text-gray-600'>
+              <div className='flex items-center gap-2'>
+                <Mail className='h-4 w-4 flex-shrink-0 text-gray-400' />
+                <span className='truncate font-medium'>{guest.email || ''}</span>
+              </div>
+              <div className='flex items-center gap-2'>
+                <Phone className='h-4 w-4 flex-shrink-0 text-gray-400' />
+                <span className='font-medium'>{guest.phone || ''}</span>
               </div>
             </div>
           </div>
+        </div>
 
-          {/* Subtle Status Indicator */}
-          <div className={`absolute top-0 right-0 left-0 h-1 ${guest.isCheckedIn ? 'bg-gradient-to-r from-emerald-400 to-emerald-500' : 'bg-gradient-to-r from-amber-400 to-orange-500'}`} />
-        </Card>
-      </motion.div>
+        {/* Subtle Status Indicator - Slightly thicker */}
+        <div className={`absolute top-0 right-0 left-0 h-1.5 ${guest.isCheckedIn ? 'bg-gradient-to-r from-emerald-400 to-emerald-500' : 'bg-gradient-to-r from-amber-400 to-orange-500'}`} />
+      </Card>
     )
-  }
+  })
 
   return (
     <ScrollArea className='h-full'>
       <div className='h-full bg-gradient-to-br from-slate-50 via-white to-slate-50/50'>
-        {/* Mobile-Optimized Header */}
+        {/* Header */}
         <div className='sticky top-0 z-10 border-b border-gray-200/60 bg-white/95 shadow-sm backdrop-blur-xl'>
-          <div className='space-y-4 px-4 py-4'>
+          <div className='space-y-4 px-6 py-6'>
             {/* Title and Quick Stats Row */}
             <div className='flex items-start justify-between'>
               <div className='min-w-0 flex-1'>
-                <h1 className='text-2xl leading-tight font-bold text-gray-900'>Danh sách khách</h1>
-                <p className='mt-0.5 text-sm text-gray-600'>
-                  {actualGuests.length} khách • {actualCheckedInCount} đã tham dự
-                </p>
+                <div className='flex items-center gap-2'>
+                  <h1 className='text-2xl leading-tight font-bold text-gray-900'>Danh sách khách</h1>
+                  {isLoading && <div className='h-4 w-4 animate-spin rounded-full border-2 border-blue-600 border-t-transparent' />}
+                  {isError && (
+                    <Button variant='ghost' size='sm' onClick={() => refetch()} className='h-6 px-2 text-red-600 hover:bg-red-50'>
+                      <RefreshCw className='mr-1 h-3 w-3' />
+                      Thử lại
+                    </Button>
+                  )}
+                </div>
+                <p className='mt-0.5 text-sm text-gray-600'>{isLoading ? 'Đang tải...' : `${actualGuests.length} khách • ${actualCheckedInCount} đã tham dự`}</p>
               </div>
 
               {/* Compact Stats */}
@@ -518,69 +589,57 @@ export function GuestList() {
               </div>
             </div>
 
-            {/* Mobile Search and Actions */}
-            <div className='flex gap-2'>
-              {/* Enhanced Search Input */}
-              <div className='relative flex-1'>
-                <Search className='absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-gray-400' />
-                <input
-                  type='text'
-                  placeholder='Tìm kiếm khách...'
-                  value={filters.searchTerm}
-                  onChange={(e) => handleSearchChange(e.target.value)}
-                  className='h-11 w-full rounded-xl border border-gray-200 bg-white pr-4 pl-10 text-sm shadow-sm transition-all duration-200 placeholder:text-gray-400 focus:border-blue-500 focus:shadow-md focus:ring-2 focus:ring-blue-500/10'
-                />
-              </div>
+            {/* Search and Actions */}
+            <div className='flex gap-3'>
+              {/* Enhanced Search Input with Optimized Debouncing */}
+              <OptimizedSearchInput
+                onSearch={handleSearchChange}
+                placeholder='Tìm kiếm khách...'
+                className='flex-1'
+                debounceMs={150} // Reduced debounce for faster response
+              />
 
               {/* Enhanced Filter Button with Badge and Active State */}
               <div className='flex gap-1'>
-                <motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }} transition={{ duration: 0.2 }}>
-                  <Button
-                    variant='outline'
-                    size='sm'
-                    onClick={() => setShowFilterModal(true)}
-                    className={`relative h-11 w-11 rounded-xl p-0 shadow-sm transition-all duration-300 ${
-                      hasActiveFilters ? 'border-blue-400 bg-blue-50 text-blue-600 hover:bg-blue-100 hover:shadow-lg' : 'border-gray-200 bg-white text-gray-600 hover:bg-gray-50 hover:shadow-md'
-                    }`}
-                  >
-                    <SlidersHorizontal className={`h-4 w-4 transition-transform duration-200 ${hasActiveFilters ? 'rotate-12' : ''}`} />
+                <Button
+                  variant='outline'
+                  size='sm'
+                  onClick={() => setShowFilterModal(true)}
+                  className={`relative h-11 w-11 rounded-xl p-0 shadow-sm transition-all duration-200 active:scale-95 ${
+                    hasActiveFilters ? 'border-blue-400 bg-blue-50 text-blue-600 hover:bg-blue-100 hover:shadow-lg' : 'border-gray-200 bg-white text-gray-600 hover:bg-gray-50 hover:shadow-md'
+                  }`}
+                >
+                  <SlidersHorizontal className={`h-4 w-4 transition-transform duration-200 ${hasActiveFilters ? 'rotate-12' : ''}`} />
 
-                    {/* Enhanced Badge */}
-                    {getActiveFiltersCount() > 0 && (
-                      <motion.span
-                        initial={{ scale: 0 }}
-                        animate={{ scale: 1 }}
-                        className='absolute -top-1.5 -right-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-gradient-to-r from-blue-500 to-blue-600 text-xs font-bold text-white shadow-lg ring-2 ring-white'
-                      >
-                        {getActiveFiltersCount()}
-                      </motion.span>
-                    )}
-                  </Button>
-                </motion.div>
+                  {/* Enhanced Badge */}
+                  {getActiveFiltersCount() > 0 && (
+                    <span className='absolute -top-1.5 -right-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-gradient-to-r from-blue-500 to-blue-600 text-xs font-bold text-white shadow-lg ring-2 ring-white'>
+                      {getActiveFiltersCount()}
+                    </span>
+                  )}
+                </Button>
 
                 {/* Clear Filters Button */}
                 {hasActiveFilters && (
-                  <motion.div initial={{ scale: 0, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0, opacity: 0 }} transition={{ duration: 0.2 }}>
-                    <Button
-                      variant='outline'
-                      size='sm'
-                      onClick={clearFilters}
-                      className='h-11 w-11 rounded-xl border-amber-200 bg-amber-50 p-0 text-amber-600 shadow-sm transition-all duration-200 hover:bg-amber-100 hover:shadow-md'
-                      title='Xóa bộ lọc'
-                    >
-                      <X className='h-4 w-4' />
-                    </Button>
-                  </motion.div>
+                  <Button
+                    variant='outline'
+                    size='sm'
+                    onClick={clearFilters}
+                    className='h-11 w-11 rounded-xl border-amber-200 bg-amber-50 p-0 text-amber-600 shadow-sm transition-all duration-200 hover:bg-amber-100 hover:shadow-md active:scale-95'
+                    title='Xóa bộ lọc'
+                  >
+                    <X className='h-4 w-4' />
+                  </Button>
                 )}
               </div>
 
-              {/* Mobile Add Button */}
+              {/* Add Button */}
               <Button
                 size='sm'
                 onClick={() => setShowAddModal(true)}
-                className='h-11 w-11 rounded-xl bg-gradient-to-br from-blue-600 to-blue-700 p-0 text-white shadow-lg transition-all duration-200 hover:from-blue-700 hover:to-blue-800 hover:shadow-xl'
+                className='h-12 w-12 rounded-xl bg-gradient-to-br from-blue-600 to-blue-700 p-0 text-white shadow-lg transition-all duration-200 hover:from-blue-700 hover:to-blue-800 hover:shadow-xl'
               >
-                <Plus className='h-4 w-4' />
+                <Plus className='h-5 w-5' />
               </Button>
             </div>
           </div>
@@ -592,7 +651,7 @@ export function GuestList() {
             initial={{ opacity: 0, height: 0 }}
             animate={{ opacity: 1, height: 'auto' }}
             exit={{ opacity: 0, height: 0 }}
-            className='border-b border-gray-100 bg-gradient-to-r from-blue-50/50 to-indigo-50/50 px-4 py-3'
+            className='border-b border-gray-100 bg-gradient-to-r from-blue-50/50 to-indigo-50/50 px-6 py-4'
           >
             <div className='flex items-center justify-between'>
               <div className='flex items-center gap-2'>
@@ -608,23 +667,17 @@ export function GuestList() {
 
             <div className='mt-2 flex flex-wrap gap-1.5'>
               {filters.searchTerm && (
-                <motion.div
-                  initial={{ scale: 0 }}
-                  animate={{ scale: 1 }}
-                  className='inline-flex items-center gap-1 rounded-full border border-gray-200 bg-white px-2.5 py-1 text-xs font-medium text-gray-700 shadow-sm'
-                >
+                <div className='inline-flex items-center gap-1 rounded-full border border-gray-200 bg-white px-2.5 py-1 text-xs font-medium text-gray-700 shadow-sm'>
                   <Search className='h-3 w-3' />
                   <span className='text-xs'>{filters.searchTerm}</span>
                   <button onClick={() => updateFilters({ searchTerm: '' })} className='ml-1 rounded-full p-0.5 hover:bg-gray-100'>
                     <X className='h-2.5 w-2.5' />
                   </button>
-                </motion.div>
+                </div>
               )}
 
               {filters.status !== 'all' && (
-                <motion.div
-                  initial={{ scale: 0 }}
-                  animate={{ scale: 1 }}
+                <div
                   className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs font-medium shadow-sm ${
                     filters.status === 'checked-in' ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : 'border-amber-200 bg-amber-50 text-amber-700'
                   }`}
@@ -634,15 +687,11 @@ export function GuestList() {
                   <button onClick={() => updateFilters({ status: 'all' })} className='ml-1 rounded-full p-0.5 hover:bg-white'>
                     <X className='h-2.5 w-2.5' />
                   </button>
-                </motion.div>
+                </div>
               )}
 
               {(filters.sortField !== 'name' || filters.sortOrder !== 'asc') && (
-                <motion.div
-                  initial={{ scale: 0 }}
-                  animate={{ scale: 1 }}
-                  className='inline-flex items-center gap-1 rounded-full border border-indigo-200 bg-indigo-50 px-2.5 py-1 text-xs font-medium text-indigo-700 shadow-sm'
-                >
+                <div className='inline-flex items-center gap-1 rounded-full border border-indigo-200 bg-indigo-50 px-2.5 py-1 text-xs font-medium text-indigo-700 shadow-sm'>
                   <ArrowUpDown className='h-3 w-3' />
                   {filters.sortField === 'name' && 'Tên'}
                   {filters.sortField === 'createdAt' && 'Ngày tạo'}
@@ -652,7 +701,7 @@ export function GuestList() {
                   <button onClick={() => updateFilters({ sortField: 'name', sortOrder: 'asc' })} className='ml-1 rounded-full p-0.5 hover:bg-white'>
                     <X className='h-2.5 w-2.5' />
                   </button>
-                </motion.div>
+                </div>
               )}
             </div>
 
@@ -662,10 +711,59 @@ export function GuestList() {
           </motion.div>
         )}
 
-        {/* Mobile-Optimized Content Area */}
-        <div className='space-y-3 px-4 pt-2 pb-6'>
+        {/* Content Area - More spacious layout */}
+        <div className='flex flex-col gap-6 px-6 pt-6 pb-12'>
+          {/* Error State */}
+          {isError && (
+            <Card className='rounded-2xl border border-red-100 bg-red-50 p-8 text-center shadow-sm'>
+              <div className='space-y-4'>
+                <div className='mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-red-100'>
+                  <X className='h-8 w-8 text-red-400' />
+                </div>
+                <div>
+                  <p className='text-lg font-semibold text-red-700'>Không thể tải danh sách khách</p>
+                  <p className='mt-1 text-sm leading-relaxed text-red-600'>{error instanceof Error ? error.message : 'Đã có lỗi xảy ra khi tải dữ liệu'}</p>
+                  <Button onClick={() => refetch()} className='mt-3 bg-red-600 hover:bg-red-700'>
+                    <RefreshCw className='mr-2 h-4 w-4' />
+                    Thử lại
+                  </Button>
+                </div>
+              </div>
+            </Card>
+          )}
+
+          {/* Loading State */}
+          {isLoading && !isError && (
+            <div className='flex flex-col gap-4'>
+              {[...Array(3)].map((_, i) => (
+                <Card key={i} className='relative overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm'>
+                  <div className='p-5'>
+                    <div className='mb-4 flex items-center justify-between'>
+                      <div className='h-7 w-24 animate-pulse rounded-full bg-gray-200'></div>
+                      <div className='h-10 w-24 animate-pulse rounded-xl bg-gray-200'></div>
+                    </div>
+                    <div className='space-y-3'>
+                      <div className='h-6 w-3/4 animate-pulse rounded bg-gray-200'></div>
+                      <div className='space-y-2'>
+                        <div className='flex items-center gap-2'>
+                          <div className='h-4 w-4 animate-pulse rounded bg-gray-200'></div>
+                          <div className='h-4 w-1/2 animate-pulse rounded bg-gray-200'></div>
+                        </div>
+                        <div className='flex items-center gap-2'>
+                          <div className='h-4 w-4 animate-pulse rounded bg-gray-200'></div>
+                          <div className='h-4 w-1/3 animate-pulse rounded bg-gray-200'></div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                  <div className='absolute top-0 right-0 left-0 h-1.5 animate-pulse bg-gray-200'></div>
+                </Card>
+              ))}
+            </div>
+          )}
+
           {/* Guest List */}
-          {actualFilteredGuests.length === 0 ? (
+          {!isLoading && !isError && actualFilteredGuests.length === 0 ? (
             <Card className='rounded-2xl border border-gray-100 bg-white p-8 text-center shadow-sm'>
               <div className='space-y-4'>
                 <div className='mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-gray-100'>
@@ -677,24 +775,34 @@ export function GuestList() {
                 </div>
               </div>
             </Card>
-          ) : (
+          ) : !isLoading && !isError && actualFilteredGuests.length > 0 ? (
             <>
-              {/* Guest Cards - Mobile Optimized */}
-              <div className='space-y-3'>{actualFilteredGuests.map((guest, index) => renderGuestCard(guest, index))}</div>
+              {/* Guest Cards - More spacious layout */}
+              <GuestListContext.Provider value={{ handleToggleCheckIn }}>
+                <div className='flex flex-col gap-6'>
+                  {actualFilteredGuests.length > 50 ? (
+                    // For large lists, implement virtual scrolling
+                    <VirtualizedGuestList guests={actualFilteredGuests} />
+                  ) : (
+                    // For smaller lists, render normally
+                    actualFilteredGuests.map((guest, index) => <GuestCard key={guest.id} guest={guest} index={index} />)
+                  )}
+                </div>
+              </GuestListContext.Provider>
 
               {/* Results Info - Only show if no active filters */}
-              {!hasActiveFilters && (
-                <div className='pt-2 text-center text-xs text-gray-500'>
-                  Hiển thị {actualFilteredGuests.length} / {actualGuests.length} khách
+              {!hasActiveFilters && actualFilteredGuests.length > 0 && (
+                <div className='rounded-xl bg-gray-50 py-3 pt-4 text-center text-sm text-gray-500'>
+                  📊 Hiển thị <span className='font-semibold text-gray-700'>{actualFilteredGuests.length}</span> / <span className='font-semibold text-gray-700'>{actualGuests.length}</span> khách
                 </div>
               )}
             </>
-          )}
+          ) : null}
         </div>
 
         {/* Modals */}
         <GuestFilterModal isOpen={showFilterModal} onClose={() => setShowFilterModal(false)} />
-        <AddGuestModal onAddGuest={MOCK_DATA_MODE ? handleAddGuest : undefined} />
+        <AddGuestModal />
         <NewGuestAddedModal
           guest={newlyAddedGuest}
           isOpen={showNewGuestAddedModal}
@@ -702,8 +810,6 @@ export function GuestList() {
             setShowNewGuestAddedModal(false)
             setNewlyAddedGuest(null)
           }}
-          mockGuests={mockGuests}
-          setMockGuests={setMockGuests}
           handleToggleCheckIn={handleToggleCheckIn}
         />
       </div>

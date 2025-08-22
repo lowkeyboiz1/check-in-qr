@@ -482,8 +482,8 @@ export function QRScannerComponent({ onScanSuccess }: QRScannerProps) {
               </div>
             )}
 
-            {/* Full Screen Scanner Container */}
-            <div className='relative w-full flex-1 overflow-hidden rounded-2xl bg-gradient-to-br from-gray-50 to-gray-100'>
+            {/* Scanner Container with Max Height */}
+            <div className='relative h-[500px] max-h-[500px] w-full overflow-hidden rounded-2xl bg-gradient-to-br from-gray-50 to-gray-100'>
               {/* Always render qr-reader element, but conditionally show content */}
               <div id='qr-reader' className={`h-full w-full ${!isScanning ? 'hidden' : ''}`} onLoad={() => console.log('qr-reader element loaded')} />
 
