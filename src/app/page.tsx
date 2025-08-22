@@ -1,8 +1,10 @@
 'use client'
 
+import { useEffect, useState } from 'react'
 import { useAtom } from 'jotai'
+import { useRouter } from 'next/navigation'
 import { motion, AnimatePresence } from 'framer-motion'
-import { activeTabAtom } from '@/store/atoms'
+import { activeTabAtom, isAuthenticatedAtom } from '@/store/atoms'
 import { QRScannerComponent } from '@/components/qr-scanner'
 import { GuestList } from '@/components/guest-list'
 import { SettingsPage } from '@/components/settings-page'
@@ -12,6 +14,38 @@ import { DemoQRGenerator } from '@/components/demo-qr-generator'
 
 export default function Home() {
   const [activeTab] = useAtom(activeTabAtom)
+  const [isAuthenticated, setIsAuthenticated] = useAtom(isAuthenticatedAtom)
+  const [isLoading, setIsLoading] = useState(true)
+  const router = useRouter()
+
+  // Check authentication on mount
+  useEffect(() => {
+    const authStatus = localStorage.getItem('isAuthenticated')
+    if (authStatus !== 'true') {
+      router.push('/login')
+    } else {
+      // Update the atom state to match localStorage
+      setIsAuthenticated(true)
+      setIsLoading(false)
+    }
+  }, [router, setIsAuthenticated])
+
+  // Show loading while checking authentication
+  if (isLoading) {
+    return (
+      <div className='flex min-h-screen items-center justify-center bg-gray-50'>
+        <div className='text-center'>
+          <div className='mx-auto mb-4 h-12 w-12 animate-spin rounded-full border-b-2 border-blue-600'></div>
+          <p className='text-gray-600'>Đang kiểm tra đăng nhập...</p>
+        </div>
+      </div>
+    )
+  }
+
+  // Redirect if not authenticated
+  if (!isAuthenticated) {
+    return null
+  }
 
   const renderActiveTab = () => {
     switch (activeTab) {

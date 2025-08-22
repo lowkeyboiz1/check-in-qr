@@ -194,3 +194,8 @@ export const triggerFloatingAnimationAtom = atom(null, (get, set, x: number, y: 
     set(floatingAnimationsAtom, (prev) => prev.filter((anim) => anim.id !== animationId))
   }, 1000) // Match animation duration
 })
+
+// Authentication atoms
+export const isAuthenticatedAtom = atom<boolean>(false)
+export const showSecurityModalAtom = atom<boolean>(false)
+export const loginAttemptsAtom = atom<number>(0)
