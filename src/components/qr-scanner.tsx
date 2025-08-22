@@ -11,15 +11,28 @@ import { setCurrentGuestAtom, isLoadingAtom } from '@/store/atoms'
 import type { Guest } from '@/store/atoms'
 import confetti from 'canvas-confetti'
 import { ScrollArea } from '@/components/ui/scroll-area'
+import { QRGuestModal } from '@/components/qr-guest-modal'
 
 interface QRScannerProps {
   onScanSuccess?: (result: string) => void
 }
 
 interface QRResponseData {
-  name?: string
-  email?: string
-  phone?: string
+  success?: boolean
+  data?: {
+    _id?: string
+    id: string
+    name: string
+    email: string
+    phone: string
+    gender?: string
+    age?: string
+    source?: string
+    isCheckedIn: boolean
+    createdAt?: string
+    checkedInAt?: string
+    updatedAt?: string
+  }
   message?: string
   error?: string
   [key: string]: any
@@ -644,93 +657,8 @@ export function QRScannerComponent({ onScanSuccess }: QRScannerProps) {
         </ScrollArea>
       </div>
 
-      {/* QR Response Modal */}
-      <AnimatePresence>
-        {showModal && (
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className='fixed inset-0 z-50 bg-black/50 backdrop-blur-sm' onClick={closeModal}>
-            <motion.div
-              initial={{ opacity: 0, scale: 0.95, y: 20 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.95, y: 20 }}
-              className='fixed top-1/2 left-1/2 w-full max-w-md -translate-x-1/2 -translate-y-1/2 transform px-4'
-              onClick={(e) => e.stopPropagation()}
-            >
-              <Card className='w-full rounded-3xl border border-gray-200 bg-white p-6 shadow-2xl'>
-                <div className='space-y-4'>
-                  {/* Header */}
-                  <div className='flex items-center justify-between'>
-                    <h3 className='text-lg font-semibold text-gray-900'>Kết quả quét QR</h3>
-                    <Button variant='ghost' size='sm' onClick={closeModal} className='h-8 w-8 rounded-full p-0 text-gray-400 hover:bg-gray-100 hover:text-gray-600'>
-                      <X className='h-4 w-4' />
-                    </Button>
-                  </div>
-
-                  {/* Content */}
-                  <div className='space-y-4'>
-                    {isLoadingResponse ? (
-                      <div className='flex items-center justify-center py-8'>
-                        <div className='flex items-center gap-3'>
-                          <div className='h-6 w-6 animate-spin rounded-full border-2 border-blue-600 border-t-transparent' />
-                          <p className='text-sm text-gray-600'>Đang lấy dữ liệu...</p>
-                        </div>
-                      </div>
-                    ) : qrResponse ? (
-                      <>
-                        {qrResponse.error ? (
-                          <div className='rounded-2xl border border-red-200 bg-red-50 p-4'>
-                            <div className='flex items-start gap-3'>
-                              <AlertCircle className='mt-0.5 h-5 w-5 flex-shrink-0 text-red-500' />
-                              <div>
-                                <p className='font-medium text-red-800'>Lỗi</p>
-                                <p className='mt-1 text-sm text-red-700'>{qrResponse.error}</p>
-                              </div>
-                            </div>
-                          </div>
-                        ) : qrResponse.name && qrResponse.email && qrResponse.phone ? (
-                          <div className='rounded-2xl border border-green-200 bg-green-50 p-4'>
-                            <div className='flex items-start gap-3'>
-                              <CheckCircle className='mt-0.5 h-5 w-5 flex-shrink-0 text-green-500' />
-                              <div className='flex-1'>
-                                <p className='font-medium text-green-800'>Thông tin khách</p>
-                                <div className='mt-3 space-y-2'>
-                                  <div className='flex items-center gap-2'>
-                                    <User className='h-4 w-4 text-green-600' />
-                                    <span className='text-sm font-medium text-green-700'>{qrResponse.name}</span>
-                                  </div>
-                                  <div className='flex items-center gap-2'>
-                                    <Mail className='h-4 w-4 text-green-600' />
-                                    <span className='text-sm text-green-700'>{qrResponse.email}</span>
-                                  </div>
-                                  <div className='flex items-center gap-2'>
-                                    <Phone className='h-4 w-4 text-green-600' />
-                                    <span className='text-sm text-green-700'>{qrResponse.phone}</span>
-                                  </div>
-                                </div>
-                              </div>
-                            </div>
-                          </div>
-                        ) : (
-                          <div className='rounded-2xl border border-gray-200 bg-gray-50 p-4'>
-                            <p className='mb-2 text-sm font-medium text-gray-700'>Dữ liệu nhận được:</p>
-                            <pre className='max-h-40 overflow-auto text-xs whitespace-pre-wrap text-gray-600'>{JSON.stringify(qrResponse, null, 2)}</pre>
-                          </div>
-                        )}
-                      </>
-                    ) : null}
-                  </div>
-
-                  {/* Footer */}
-                  <div className='flex justify-end pt-2'>
-                    <Button onClick={closeModal} size='sm' className='bg-gradient-to-r from-blue-600 to-blue-700 text-white hover:from-blue-700 hover:to-blue-800'>
-                      Đóng
-                    </Button>
-                  </div>
-                </div>
-              </Card>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+      {/* QR Guest Modal */}
+      <QRGuestModal guestData={qrResponse?.success && qrResponse.data ? qrResponse.data : null} isOpen={showModal} onClose={closeModal} />
     </div>
   )
 }
