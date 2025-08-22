@@ -58,7 +58,7 @@ function isValidEmail(email: string): boolean {
 
 function isValidPhone(phone: string): boolean {
   // Vietnamese phone number format - handle both local and international format
-  let cleanPhone = phone.replace(/\s/g, '').replace(/^'/, '').replace(/^\+84/, '0')
+  const cleanPhone = phone.replace(/\s/g, '').replace(/^'/, '').replace(/^\+84/, '0')
   const phoneRegex = /^(0[3|5|7|8|9])+([0-9]{8})$/
   return phoneRegex.test(cleanPhone)
 }

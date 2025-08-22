@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
@@ -69,7 +69,7 @@ export function QRScannerComponent({ onScanSuccess }: QRScannerProps) {
     }
   }
 
-  const getCameras = async () => {
+  const getCameras = useCallback(async () => {
     try {
       // First request camera permission
       const hasPermission = await requestCameraPermission()
@@ -129,7 +129,7 @@ export function QRScannerComponent({ onScanSuccess }: QRScannerProps) {
       setError('Không thể truy cập camera: ' + (err as Error).message)
       return []
     }
-  }
+  }, [])
 
   const switchCamera = async () => {
     if (cameras.length < 2) return

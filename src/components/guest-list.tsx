@@ -192,17 +192,17 @@ const NewGuestAddedModal = memo(function NewGuestAddedModal({
   const { data: allGuests = [] } = useGuests()
   const triggerAnimation = useSetAtom(triggerFloatingAnimationAtom)
 
-  if (!guest) return null
-
   // Get the current state of the guest from React Query data or use the atom guest
-  const reactQueryGuest = allGuests.find((g: Guest) => g.id === guest.id)
-  const currentGuest = reactQueryGuest || convertGuestTypes(guest)
+  const reactQueryGuest = allGuests.find((g: Guest) => g.id === guest?.id)
+  const currentGuest = reactQueryGuest || (guest ? convertGuestTypes(guest) : null)
 
   const handleToggleCheckIn = useCallback(async () => {
+    if (!guest) return
+
     setIsCheckingIn(true)
 
     // Trigger animation if checking in
-    if (!currentGuest.isCheckedIn && buttonRef.current) {
+    if (currentGuest && !currentGuest.isCheckedIn && buttonRef.current) {
       const rect = buttonRef.current.getBoundingClientRect()
       triggerAnimation(rect.left + rect.width / 2, rect.top)
     }
@@ -214,7 +214,9 @@ const NewGuestAddedModal = memo(function NewGuestAddedModal({
     } finally {
       setIsCheckingIn(false)
     }
-  }, [currentGuest.isCheckedIn, guest.id, parentHandleToggleCheckIn, triggerAnimation])
+  }, [currentGuest, guest, parentHandleToggleCheckIn, triggerAnimation])
+
+  if (!guest || !currentGuest) return null
 
   return (
     <AnimatePresence>

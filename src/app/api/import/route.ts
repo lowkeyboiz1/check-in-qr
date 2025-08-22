@@ -58,7 +58,7 @@ export async function POST(request: NextRequest) {
           const fullName = `${firstName} ${lastName}`.trim()
 
           // Clean phone number: remove quotes, +84 prefix, and format
-          let cleanPhone = (data['Phone'] || '').toString().replace(/^'/, '').replace(/^\+84/, '0')
+          const cleanPhone = (data['Phone'] || '').toString().replace(/^'/, '').replace(/^\+84/, '0')
 
           console.log('Name mapping:', { firstName, lastName, fullName })
           console.log('Phone mapping:', { original: data['Phone'], cleaned: cleanPhone })
