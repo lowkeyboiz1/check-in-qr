@@ -458,88 +458,6 @@ export function QRScannerComponent({ onScanSuccess }: QRScannerProps) {
         <ScrollArea className='flex-1'>
           <div className='space-y-4 pb-4'>
             {/* Error Message */}
-            {error && (
-              <div className='rounded-2xl border border-red-200 bg-red-50 p-4'>
-                <div className='flex items-center gap-2'>
-                  <div className='h-2 w-2 flex-shrink-0 rounded-full bg-red-500' />
-                  <div className='flex-1'>
-                    <p className='text-sm font-medium text-red-700'>{error}</p>
-                    {error.includes('Element') && (
-                      <Button
-                        onClick={() => {
-                          setError(null)
-                          window.location.reload()
-                        }}
-                        size='sm'
-                        variant='outline'
-                        className='mt-2 border-red-300 text-red-700 hover:bg-red-100'
-                      >
-                        Refresh trang
-                      </Button>
-                    )}
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* Scanner Container with Max Height */}
-            <div className='relative h-[500px] max-h-[500px] w-full overflow-hidden rounded-2xl bg-gradient-to-br from-gray-50 to-gray-100'>
-              {/* Always render qr-reader element, but conditionally show content */}
-              <div id='qr-reader' className={`h-full w-full ${!isScanning ? 'hidden' : ''}`} onLoad={() => console.log('qr-reader element loaded')} />
-
-              {isScanning ? (
-                <>
-                  {/* Debug info in development */}
-                  {process.env.NODE_ENV === 'development' && (
-                    <div className='absolute top-4 left-4 z-50 rounded bg-black/70 px-3 py-2 text-xs text-white'>
-                      Camera: {isBackCamera ? 'Back' : 'Front'} | ID: {currentCameraId?.slice(-4)}
-                    </div>
-                  )}
-
-                  {/* Control overlay */}
-                  <div className='absolute top-4 right-4 z-50'>
-                    <motion.div whileTap={{ scale: 0.95 }}>
-                      <Button onClick={stopScanning} size='sm' variant='outline' className='border-white/30 bg-black/70 text-white hover:bg-black/90'>
-                        <X className='mr-1 h-4 w-4' />
-                        Đóng
-                      </Button>
-                    </motion.div>
-                  </div>
-
-                  {/* Camera switch control */}
-                  {cameras.length > 1 && (
-                    <div className='absolute right-4 bottom-4 z-50'>
-                      <motion.div whileTap={{ scale: 0.95 }}>
-                        <Button onClick={switchCamera} size='sm' variant='outline' className='border-white/30 bg-black/70 text-white hover:bg-black/90'>
-                          <RotateCcw className='mr-1 h-4 w-4' />
-                          {isBackCamera ? 'Trước' : 'Sau'}
-                        </Button>
-                      </motion.div>
-                    </div>
-                  )}
-
-                  {/* Full screen instructions */}
-                  <div className='absolute bottom-4 left-4 z-50'>
-                    <div className='rounded bg-black/70 px-3 py-2 text-sm text-white'>
-                      <p>🎯 Hướng camera vào mã QR</p>
-                    </div>
-                  </div>
-                </>
-              ) : (
-                <div className='flex h-full w-full items-center justify-center'>
-                  <div className='space-y-6 text-center'>
-                    <div className='mx-auto flex h-20 w-20 items-center justify-center rounded-3xl bg-gradient-to-br from-blue-100 to-blue-50'>
-                      <Camera className='h-10 w-10 text-blue-600' />
-                    </div>
-                    <div>
-                      <p className='text-lg font-medium text-gray-700'>Chưa bắt đầu quét</p>
-                      <p className='mt-2 text-sm text-gray-500'>Nhấn nút bên dưới để mở camera toàn màn hình</p>
-                    </div>
-                  </div>
-                </div>
-              )}
-            </div>
-
             {/* Action Buttons - Only show when not scanning */}
             {!isScanning && (
               <Card className='mx-auto w-full max-w-sm rounded-3xl border border-gray-200 bg-white p-6 shadow-lg'>
@@ -628,6 +546,87 @@ export function QRScannerComponent({ onScanSuccess }: QRScannerProps) {
                 </div>
               </Card>
             )}
+            {error && (
+              <div className='rounded-2xl border border-red-200 bg-red-50 p-4'>
+                <div className='flex items-center gap-2'>
+                  <div className='h-2 w-2 flex-shrink-0 rounded-full bg-red-500' />
+                  <div className='flex-1'>
+                    <p className='text-sm font-medium text-red-700'>{error}</p>
+                    {error.includes('Element') && (
+                      <Button
+                        onClick={() => {
+                          setError(null)
+                          window.location.reload()
+                        }}
+                        size='sm'
+                        variant='outline'
+                        className='mt-2 border-red-300 text-red-700 hover:bg-red-100'
+                      >
+                        Refresh trang
+                      </Button>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Scanner Container with Max Height */}
+            <div className='relative h-[500px] max-h-[500px] w-full overflow-hidden rounded-2xl bg-gradient-to-br from-gray-50 to-gray-100'>
+              {/* Always render qr-reader element, but conditionally show content */}
+              <div id='qr-reader' className={`h-full w-full ${!isScanning ? 'hidden' : ''}`} onLoad={() => console.log('qr-reader element loaded')} />
+
+              {isScanning ? (
+                <>
+                  {/* Debug info in development */}
+                  {process.env.NODE_ENV === 'development' && (
+                    <div className='absolute top-4 left-4 z-50 rounded bg-black/70 px-3 py-2 text-xs text-white'>
+                      Camera: {isBackCamera ? 'Back' : 'Front'} | ID: {currentCameraId?.slice(-4)}
+                    </div>
+                  )}
+
+                  {/* Control overlay */}
+                  <div className='absolute top-4 right-4 z-50'>
+                    <motion.div whileTap={{ scale: 0.95 }}>
+                      <Button onClick={stopScanning} size='sm' variant='outline' className='border-white/30 bg-black/70 text-white hover:bg-black/90'>
+                        <X className='mr-1 h-4 w-4' />
+                        Đóng
+                      </Button>
+                    </motion.div>
+                  </div>
+
+                  {/* Camera switch control */}
+                  {cameras.length > 1 && (
+                    <div className='absolute right-4 bottom-4 z-50'>
+                      <motion.div whileTap={{ scale: 0.95 }}>
+                        <Button onClick={switchCamera} size='sm' variant='outline' className='border-white/30 bg-black/70 text-white hover:bg-black/90'>
+                          <RotateCcw className='mr-1 h-4 w-4' />
+                          {isBackCamera ? 'Trước' : 'Sau'}
+                        </Button>
+                      </motion.div>
+                    </div>
+                  )}
+
+                  {/* Full screen instructions */}
+                  <div className='absolute bottom-4 left-4 z-50'>
+                    <div className='rounded bg-black/70 px-3 py-2 text-sm text-white'>
+                      <p>🎯 Hướng camera vào mã QR</p>
+                    </div>
+                  </div>
+                </>
+              ) : (
+                <div className='flex h-full w-full items-center justify-center'>
+                  <div className='space-y-6 text-center'>
+                    <div className='mx-auto flex h-20 w-20 items-center justify-center rounded-3xl bg-gradient-to-br from-blue-100 to-blue-50'>
+                      <Camera className='h-10 w-10 text-blue-600' />
+                    </div>
+                    <div>
+                      <p className='text-lg font-medium text-gray-700'>Chưa bắt đầu quét</p>
+                      <p className='mt-2 text-sm text-gray-500'>Nhấn nút bên dưới để mở camera toàn màn hình</p>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
 
             {/* Instructions - Only show when not scanning */}
             {!isScanning && (
