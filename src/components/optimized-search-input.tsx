@@ -46,7 +46,7 @@ export const OptimizedSearchInput = memo(function OptimizedSearchInput({ onSearc
           value={searchQuery}
           onChange={handleInputChange}
           placeholder={placeholder}
-          className='h-11 w-full rounded-xl border border-gray-200 bg-white pr-4 pl-10 text-sm shadow-sm transition-all duration-200 placeholder:text-gray-400 focus:border-blue-500 focus:shadow-md focus:ring-2 focus:ring-blue-500/10'
+          className='h-11 w-full rounded-xl border border-gray-200 bg-white pr-4 pl-10 text-base shadow-sm transition-all duration-200 placeholder:text-gray-400 focus:border-blue-500 focus:shadow-md focus:ring-2 focus:ring-blue-500/10'
         />
         {searchQuery && (
           <Button type='button' variant='ghost' size='sm' onClick={handleClear} className='absolute top-1/2 right-1 h-6 w-6 -translate-y-1/2 transform rounded-full p-0 hover:bg-gray-100'>
